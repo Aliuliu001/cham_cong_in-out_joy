@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Báo cáo chấm công</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f7f7f7; font-family: -apple-system, Arial, sans-serif; }
+  .box { max-width: 640px; margin: 16px auto; background: #fff; border-radius: 18px;
+         box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 25px; }
+  h1 { text-align: center; margin: 0 0 16px; font-size: 22px; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; }
+  input, button { padding: 12px; font-size: 16px; border-radius: 10px; }
+  input { flex: 1; border: 1px solid #ccc; }
+  button { border: none; background: #5C4A3A; color: #fff; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  th { background: #F6F3EE; }
+  .tre { color: #c00; font-weight: bold; }
+  .ok { color: #1a7a33; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>📊 Báo cáo chấm công</h1>
+  <div class="row">
+    <input id="ngay" placeholder="Ngày: 10/09/2026">
+    <button onclick="xemNgay()">Xem ngày</button>
+  </div>
+  <div class="row">
+    <input id="thangMa" placeholder="Mã NV + tháng: NV001 09/2026">
+    <button onclick="xemThang()">Xem tháng</button>
+  </div>
+  <div id="kq"></div>
+</div>
+<script>
+function xemNgay() {
+  var ngay = document.getElementById('ngay').value.trim();
+  if (!ngay) { alert('Nhập ngày kiểu 10/09/2026'); return; }
+  document.getElementById('kq').textContent = 'Đang tải...';
+  google.script.run.withSuccessHandler(function (rs) {
+    var h = '<table><tr><th>Mã</th><th>Tên</th><th>Lượt chấm</th><th>Trễ</th><th>Quên RA</th></tr>';
+    rs.forEach(function (r) {
+      var tre = 0;
+      r.logs.forEach(function (l) { tre += (l.tre || 0); });
+      h += '<tr><td>' + r.ma + '</td><td>' + r.ten + '</td><td>' +
+        r.logs.map(function (l) { return l.gio + ' ' + l.type + (l.ca ? ' (' + l.ca + ')' : ''); }).join('<br>') +
+        '</td><td class="' + (tre > 0 ? 'tre' : 'ok') + '">' + (tre ? tre + ' phút' : 'Đúng giờ') + '</td>' +
+        '<td>' + (r.quenRA ? 'Quên ' + r.quenRA + ' lần' : '—') + '</td></tr>';
+    });
+    document.getElementById('kq').innerHTML = h + '</table>';
+  }).getBaoCaoNgay(ngay);
+}
+function xemThang() {
+  var v = document.getElementById('thangMa').value.trim().split(/\s+/);
+  if (v.length < 2) { alert('Nhập kiểu: NV001 09/2026'); return; }
+  document.getElementById('kq').textContent = 'Đang tải...';
+  google.script.run.withSuccessHandler(function (r) {
+    document.getElementById('kq').innerHTML =
+      '<p><b>' + r.ma + ' — tháng ' + r.thang + '</b></p>' +
+      '<p>Tổng giờ: <b>' + r.tongGio + 'h</b> (' + r.soCa + ' ca)</p>' +
+      '<p>Đi trễ: <b class="tre">' + r.soLanTre + ' lần</b> — Quên RA: <b>' + r.soLanQuenRA + ' lần</b></p>' +
+      '<p>KPI giờ làm: <b>' + r.kpi + '%</b>' + (r.soLanTre >= 4 ? ' (trễ từ 4 lần = 0%)' : '') + '</p>' +
+      (r.chiTiet.length ? '<table><tr><th>Ngày</th><th>Ca</th><th>Giờ</th></tr>' +
+        r.chiTiet.map(function (c) { return '<tr><td>' + c.ngay + '</td><td>' + c.ca + '</td><td>' + c.gio + 'h</td></tr>'; }).join('') +
+        '</table>' : '<p>Chưa có ca nào tính được giờ.</p>');
+  }).getBaoCaoThang(v[0], v[1]);
+}
+document.getElementById('ngay').value =
+  new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/-/g, '/');
+</script>
+</body>
+</html>
