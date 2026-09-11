@@ -6,69 +6,149 @@
 <title>Báo cáo chấm công</title>
 <style>
   * { box-sizing: border-box; }
-  body { margin: 0; background: #F6F3EE; font-family: -apple-system, Arial, sans-serif; }
-  .box { max-width: 640px; margin: 16px auto; background: #fff; border-radius: 18px;
+  body { margin: 0; background: #F6F3EE; font-family: -apple-system, Arial, sans-serif; color: #333; }
+  .box { max-width: 680px; margin: 16px auto; background: #fff; border-radius: 18px;
          box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 25px; }
-  h1 { text-align: center; margin: 0 0 16px; font-size: 22px; }
+  h1 { text-align: center; margin: 0 0 6px; font-size: 22px; color: #5C4A3A; }
+  .sub { text-align: center; color: #888; font-size: 14px; margin-bottom: 14px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .tabs button { flex: 1; padding: 12px; font-size: 16px; font-weight: bold; border-radius: 12px;
+    border: 2px solid #ddd; background: #fff; color: #555; }
+  .tabs button.on { border-color: #5C4A3A; background: #F6F3EE; color: #5C4A3A; }
   .row { display: flex; gap: 8px; margin-bottom: 10px; }
-  input, button { padding: 12px; font-size: 16px; border-radius: 10px; }
-  input { flex: 1; border: 1px solid #ccc; }
-  button { border: none; background: #5C4A3A; color: #fff; font-weight: bold; }
+  input, select { flex: 1; padding: 12px; font-size: 16px; border-radius: 10px; border: 1px solid #ccc; }
+  .go { border: none; background: #5C4A3A; color: #fff; font-weight: bold; border-radius: 10px; padding: 12px 18px; font-size: 16px; }
+  .cards { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  .card { flex: 1; min-width: 100px; background: #F6F3EE; border-radius: 12px; padding: 10px; text-align: center; }
+  .card b { display: block; font-size: 22px; color: #5C4A3A; }
+  .card span { font-size: 13px; color: #777; }
+  .card.warn b { color: #c00; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
-  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-  th { background: #F6F3EE; }
+  th, td { border: 1px solid #e5ddd2; padding: 8px; text-align: left; }
+  th { background: #F6F3EE; color: #5C4A3A; }
   .tre { color: #c00; font-weight: bold; }
-  .ok { color: #1a7a33; font-weight: bold; }
+  .okc { color: #1a7a33; font-weight: bold; }
+  .miss { background: #fff3f3; border-radius: 12px; padding: 12px; margin-top: 12px; }
+  .miss b { color: #c00; }
+  .anh { font-size: 13px; }
 </style>
 </head>
 <body>
 <div class="box">
   <h1>📊 Báo cáo chấm công</h1>
-  <div class="row">
-    <input id="ngay" placeholder="Ngày: 10/09/2026">
-    <button onclick="xemNgay()">Xem ngày</button>
+  <div class="sub" id="today"></div>
+  <div class="tabs">
+    <button id="tabNgay" class="on" onclick="doiTab('ngay')">Hôm nay</button>
+    <button id="tabThang" onclick="doiTab('thang')">Cả tháng</button>
   </div>
-  <div class="row">
-    <input id="thangMa" placeholder="Mã NV + tháng: NV001 09/2026">
-    <button onclick="xemThang()">Xem tháng</button>
+
+  <div id="pNgay">
+    <div class="row">
+      <input id="ngay" placeholder="Ngày: 11/09/2026">
+      <button class="go" onclick="xemNgay()">Xem</button>
+    </div>
+    <div id="kqNgay"></div>
   </div>
-  <div id="kq"></div>
+
+  <div id="pThang" style="display:none">
+    <div class="row">
+      <select id="thangMa"><option value="">-- Chọn nhân viên --</option></select>
+      <input id="thang" placeholder="Tháng: 09/2026" style="max-width:130px">
+      <button class="go" onclick="xemThang()">Xem</button>
+    </div>
+    <div id="kqThang"></div>
+  </div>
 </div>
+
 <script>
-function xemNgay() {
-  var ngay = document.getElementById('ngay').value.trim();
-  if (!ngay) { alert('Nhập ngày kiểu 10/09/2026'); return; }
-  document.getElementById('kq').textContent = 'Đang tải...';
-  google.script.run.withSuccessHandler(function (rs) {
-    var h = '<table><tr><th>Mã</th><th>Tên</th><th>Lượt chấm</th><th>Trễ</th><th>Quên RA</th></tr>';
-    rs.forEach(function (r) {
-      var tre = 0;
-      r.logs.forEach(function (l) { tre += (l.tre || 0); });
-      h += '<tr><td>' + r.ma + '</td><td>' + r.ten + '</td><td>' +
-        r.logs.map(function (l) { return l.gio + ' ' + l.type + (l.ca ? ' (' + l.ca + ')' : ''); }).join('<br>') +
-        '</td><td class="' + (tre > 0 ? 'tre' : 'ok') + '">' + (tre ? tre + ' phút' : 'Đúng giờ') + '</td>' +
-        '<td>' + (r.quenRA ? 'Quên ' + r.quenRA + ' lần' : '—') + '</td></tr>';
+var tab = 'ngay';
+function doiTab(t) {
+  tab = t;
+  document.getElementById('tabNgay').className = t === 'ngay' ? 'on' : '';
+  document.getElementById('tabThang').className = t === 'thang' ? 'on' : '';
+  document.getElementById('pNgay').style.display = t === 'ngay' ? '' : 'none';
+  document.getElementById('pThang').style.display = t === 'thang' ? '' : 'none';
+}
+function homNay() {
+  var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+  return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear();
+}
+function thangNay() {
+  var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+  return p(d.getMonth() + 1) + '/' + d.getFullYear();
+}
+window.onload = function () {
+  document.getElementById('today').textContent = 'Hôm nay: ' + homNay();
+  document.getElementById('ngay').value = homNay();
+  document.getElementById('thang').value = thangNay();
+  google.script.run.withSuccessHandler(function (list) {
+    var s = document.getElementById('thangMa');
+    list.forEach(function (n) {
+      var o = document.createElement('option');
+      o.value = n.ma; o.textContent = n.ma + ' - ' + n.ten;
+      s.appendChild(o);
     });
-    document.getElementById('kq').innerHTML = h + '</table>';
+  }).getNhanVienList();
+  xemNgay();
+};
+function xemNgay() {
+  var ngay = document.getElementById('ngay').value.trim() || homNay();
+  var kq = document.getElementById('kqNgay');
+  kq.textContent = 'Đang tải...';
+  google.script.run.withSuccessHandler(function (rs) {
+    google.script.run.withSuccessHandler(function (vang) {
+      var soTre = 0, soQuen = 0;
+      rs.forEach(function (r) { soTre += r.soLanTre; soQuen += r.quenRA; });
+      var h = '<div class="cards">' +
+        '<div class="card"><b>' + rs.length + '</b><span>Đã chấm</span></div>' +
+        '<div class="card' + (soTre ? ' warn' : '') + '"><b>' + soTre + '</b><span>Ca trễ</span></div>' +
+        '<div class="card' + (soQuen ? ' warn' : '') + '"><b>' + soQuen + '</b><span>Quên RA</span></div>' +
+        '<div class="card' + (vang.length ? ' warn' : '') + '"><b>' + vang.length + '</b><span>Chưa chấm</span></div>' +
+        '</div>';
+      if (!rs.length) h += '<p>Chưa ai chấm ngày này.</p>';
+      else {
+        h += '<table><tr><th>NV</th><th>Vào – Ra</th><th>Ca</th><th>Tình trạng</th></tr>';
+        rs.forEach(function (r) {
+          r.caps.forEach(function (c, i) {
+            h += '<tr>' + (i === 0 ? '<td rowspan="' + r.caps.length + '"><b>' + r.ma + '</b><br>' + r.ten + '</td>' : '') +
+              '<td>' + c.vao + ' → ' + c.ra + '</td><td>' + (c.ca || '—') + '</td><td>' +
+              (c.tre > 0 ? '<span class="tre">Trễ ' + c.tre + 'p</span>' : '<span class="okc">Đúng giờ</span>') +
+              (c.thieuRA ? '<br><span class="tre">Quên RA</span>' : '') +
+              (c.anh ? '<br><a class="anh" href="' + c.anh + '" target="_blank">Xem ảnh</a>' : '') +
+              '</td></tr>';
+          });
+        });
+        h += '</table>';
+      }
+      if (vang.length) {
+        h += '<div class="miss"><b>⚠️ Chưa chấm (' + vang.length + '):</b><br>' +
+          vang.map(function (v) { return v.ma + ' ' + v.ten + ' (' + v.cas.join(', ') + ')'; }).join('<br>') + '</div>';
+      }
+      kq.innerHTML = h;
+    }).getChuaCham(ngay);
   }).getBaoCaoNgay(ngay);
 }
 function xemThang() {
-  var v = document.getElementById('thangMa').value.trim().split(/\s+/);
-  if (v.length < 2) { alert('Nhập kiểu: NV001 09/2026'); return; }
-  document.getElementById('kq').textContent = 'Đang tải...';
+  var ma = document.getElementById('thangMa').value;
+  var th = document.getElementById('thang').value.trim() || thangNay();
+  var kq = document.getElementById('kqThang');
+  if (!ma) { alert('Chọn nhân viên trước'); return; }
+  kq.textContent = 'Đang tải...';
   google.script.run.withSuccessHandler(function (r) {
-    document.getElementById('kq').innerHTML =
-      '<p><b>' + r.ma + ' — tháng ' + r.thang + '</b></p>' +
-      '<p>Tổng giờ: <b>' + r.tongGio + 'h</b> (' + r.soCa + ' ca)</p>' +
-      '<p>Đi trễ: <b class="tre">' + r.soLanTre + ' lần</b> — Quên RA: <b>' + r.soLanQuenRA + ' lần</b></p>' +
-      '<p>KPI giờ làm: <b>' + r.kpi + '%</b>' + (r.soLanTre >= 4 ? ' (trễ từ 4 lần = 0%)' : '') + '</p>' +
+    kq.innerHTML =
+      '<p><b>' + ma + ' — tháng ' + r.thang + '</b></p>' +
+      '<div class="cards">' +
+      '<div class="card"><b>' + r.tongGio + 'h</b><span>Tổng giờ (' + r.soCa + ' ca)</span></div>' +
+      '<div class="card' + (r.soLanTre ? ' warn' : '') + '"><b>' + r.soLanTre + '</b><span>Lần trễ</span></div>' +
+      '<div class="card' + (r.soLanQuenRA ? ' warn' : '') + '"><b>' + r.soLanQuenRA + '</b><span>Quên RA</span></div>' +
+      '<div class="card' + (r.kpi === 0 ? ' warn' : '') + '"><b>' + r.kpi + '%</b><span>KPI</span></div>' +
+      '</div>' +
+      (r.soLanTre >= 4 ? '<p class="tre">Trễ từ 4 lần → KPI giờ làm = 0%.</p>' : '') +
       (r.chiTiet.length ? '<table><tr><th>Ngày</th><th>Ca</th><th>Giờ</th></tr>' +
         r.chiTiet.map(function (c) { return '<tr><td>' + c.ngay + '</td><td>' + c.ca + '</td><td>' + c.gio + 'h</td></tr>'; }).join('') +
-        '</table>' : '<p>Chưa có ca nào tính được giờ.</p>');
-  }).getBaoCaoThang(v[0], v[1]);
+        '</table>' : '<p>Chưa có ca nào tính được giờ (cần đủ cặp VÀO → RA).</p>');
+  }).getBaoCaoThang(ma, th);
 }
-document.getElementById('ngay').value =
-  new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/-/g, '/');
 </script>
 </body>
 </html>
