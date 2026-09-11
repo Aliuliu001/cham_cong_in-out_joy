@@ -32,7 +32,7 @@ function setup() {
     ['Mã NV', 'Họ tên', 'Giờ mở trang', 'Vĩ độ', 'Kinh độ', 'Link ảnh',
      'Khoảng cách (m)', 'Giờ bấm nút', 'Loại IN/OUT', 'Ca', 'Trễ (phút)', 'Ghi chú']);
   ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ tên', 'Vai trò (Giáo viên/Văn phòng)']);
-  ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ tên', 'Thứ', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
+  ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ tên', 'Thứ', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
 }
 
 function ensureTab(ss, name, headers) {
@@ -59,7 +59,9 @@ function getNhanVienList() {
   return out;
 }
 
-// Lịch của 1 nhân viên trong ngày hôm nay (theo Thứ)
+// Lịch của 1 nhân viên trong ngày hôm nay (theo Thứ + Ngày)
+// Cột C=Thứ, D=Ngày (T2..CN hoặc Cả ngày = áp dụng mọi ngày), E=Ca, F=GiờBD, G=GiờKT
+// Tương thích ngược sheet cũ 6 cột (không có cột Ngày).
 function getLichHomNay(ma) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('LICHLAM');
   if (!sh) return [];
@@ -67,11 +69,25 @@ function getLichHomNay(ma) {
   var v = sh.getDataRange().getValues();
   var out = [];
   for (var i = 1; i < v.length; i++) {
-    if (String(v[i][0]).trim() === ma && String(v[i][2]).trim() === thu) {
-      out.push({ ca: String(v[i][3] || ''), bd: String(v[i][4] || ''), kt: String(v[i][5] || '') });
-    }
+    if (String(v[i][0]).trim() !== ma) continue;
+    var hasNgay = v[0].length >= 7; // sheet mới 7 cột
+    var thuCell = hasNgay ? String(v[i][2]).trim() : String(v[i][2]).trim();
+    var ngayCell = hasNgay ? String(v[i][3]).trim() : '';
+    var caCell = hasNgay ? String(v[i][4] || '') : String(v[i][3] || '');
+    var bd = hasNgay ? String(v[i][5] || '') : String(v[i][4] || '');
+    var kt = hasNgay ? String(v[i][6] || '') : String(v[i][5] || '');
+    if (!matchDay(thuCell, thu) || !matchDay(ngayCell, thu)) continue;
+    out.push({ ca: caCell, bd: bd, kt: kt });
   }
   return out;
+}
+
+// Ô ngày khớp nếu: trống, "Cả ngày", "Cả tuần", hoặc đúng Thứ hôm nay
+function matchDay(cell, thu) {
+  if (!cell) return true;
+  var c = cell.toLowerCase();
+  if (c === 'cả ngày' || c === 'ca ngay' || c === 'cả tuần' || c === 'ca tuan' || c === 'all') return true;
+  return cell.trim() === thu;
 }
 
 function getRole(ma) {
