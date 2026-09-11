@@ -76,20 +76,35 @@ function getLichHomNay(ma) {
     if (ncols >= 7) { // sheet cũ: A Mã B Tên C Thứ D Ngày E Ca F BD G KT
       ngayCell = String(v[i][3]).trim();
       caCell = String(v[i][4] || '');
-      bd = String(v[i][5] || ''); kt = String(v[i][6] || '');
+      bd = fmtTimeCell(v[i][5]); kt = fmtTimeCell(v[i][6]);
       if (!matchDay(String(v[i][2]).trim(), thu)) continue;
     } else { // sheet chuẩn 6 cột
       ngayCell = String(v[i][2]).trim();
       caCell = String(v[i][3] || '');
-      bd = String(v[i][4] || ''); kt = String(v[i][5] || '');
+      bd = fmtTimeCell(v[i][4]); kt = fmtTimeCell(v[i][5]);
     }
     if (!matchDay(ngayCell, thu)) continue;
-    out.push({ ca: caCell, bd: bd, kt: kt });
+    out.push({ ca: String(caCell).trim(), bd: bd, kt: kt });
   }
+  // Sắp xếp ca gần giờ hiện tại nhất lên đầu để GV chỉ cần tick ca đầu
+  var nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  out.forEach(function (o) {
+    var m = o.bd.match(/(\d\d):(\d\d)/);
+    o.gap = m ? Math.abs((Number(m[1]) * 60 + Number(m[2])) - nowMin) : 9999;
+  });
+  out.sort(function (a, b) { return a.gap - b.gap; });
   return out;
 }
 
-// Ô ngày khớp nếu: trống, "Cả ngày", "Cả tuần", hoặc đúng Thứ hôm nay
+// Chuẩn hóa ô giờ: Sheets hay trả về Date dài dòng kiểu
+// "Sat Dec 30 1899...GMT+0642 (Indochina Time)" -> rút về "HH:mm"
+function fmtTimeCell(x) {
+  if (x instanceof Date) return Utilities.formatDate(x, TZ, 'HH:mm');
+  var s = String(x == null ? '' : x).trim();
+  var m = s.match(/(\d{1,2})\s*:\s*(\d\d)/);
+  if (m) return ('0' + m[1]).slice(-2) + ':' + m[2];
+  return s;
+}
 function matchDay(cell, thu) {
   if (!cell) return true;
   var c = cell.toLowerCase();

@@ -121,9 +121,14 @@ window.onload = function () {
     var f = this.files[0];
     if (!f) return;
     var img = new Image();
+    img.onerror = function () {
+      document.getElementById('msg').className = 'err';
+      document.getElementById('msg').textContent = 'Ảnh lỗi, bạn chụp lại giúp mình.';
+    };
     img.onload = function () {
       // Nén ảnh bằng canvas, GIỮ NGUYÊN hướng (không dùng ctx.scale(-1,1))
-      var max = 1280, w = img.width, h = img.height;
+      // Ảnh nhỏ (~100-150KB) để gửi nhanh, không treo ở mạng yếu
+      var max = 800, w = img.width, h = img.height;
       if (w > max || h > max) {
         var r = Math.min(max / w, max / h);
         w = Math.round(w * r); h = Math.round(h * r);
@@ -131,8 +136,9 @@ window.onload = function () {
       var cv = document.createElement('canvas');
       cv.width = w; cv.height = h;
       cv.getContext('2d').drawImage(img, 0, 0, w, h);
-      var url = cv.toDataURL('image/jpeg', 0.7);
+      var url = cv.toDataURL('image/jpeg', 0.6);
       photoB64 = url.split(',')[1];
+      URL.revokeObjectURL(img.src);
       var pv = document.getElementById('preview');
       pv.src = url; pv.style.display = 'block';
       checkReady();
@@ -156,12 +162,23 @@ function checkReady() {
 
 document.getElementById('btn').onclick = function () {
   var m = document.getElementById('msg');
-  m.className = ''; m.textContent = 'Đang gửi...';
+  var btn = document.getElementById('btn');
+  m.className = ''; m.textContent = 'Đang gửi... (tầm 10-20 giây, đừng tắt trang)';
+  btn.disabled = true;
+  // Tự báo nếu quá 45 giây chưa xong (thường do mạng yếu)
+  var timeoutId = setTimeout(function () {
+    if (m.textContent.indexOf('Đang gửi') === 0) {
+      m.className = 'err';
+      m.textContent = 'Gửi lâu quá (mạng yếu). Bạn bấm nút lại 1 lần giúp mình.';
+      btn.disabled = false;
+    }
+  }, 45000);
   var now = new Date();
   var pad = function (n) { return (n < 10 ? '0' : '') + n; };
   var submitText = pad(now.getDate()) + '/' + pad(now.getMonth() + 1) + '/' +
     now.getFullYear() + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
   google.script.run.withSuccessHandler(function (r) {
+    clearTimeout(timeoutId);
     if (r.ok) {
       m.className = 'ok';
       m.innerHTML = '✅ CHECK IN THÀNH CÔNG!<br>🕐 Thời gian: ' + r.time +
@@ -180,6 +197,11 @@ document.getElementById('btn').onclick = function () {
     lat: lat, lng: lng, photo: photoB64, type: loai,
     openTs: openTs, openText: openText, submitText: submitText,
     caBd: caBd, caLabel: caLabel, confirmed: confirmed
+  }).withFailureHandler(function (e) {
+    clearTimeout(timeoutId);
+    m.className = 'err';
+    m.textContent = 'Gửi lỗi: ' + (e && e.message ? e.message : 'mạng yếu, bạn bấm lại giúp mình.');
+    btn.disabled = false;
   });
 };
 </script>
