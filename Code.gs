@@ -51,10 +51,10 @@ function getStartTime() {
 function getNhanVienList() {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DANHSACH');
   if (!sh) return [];
-  var v = sh.getDataRange().getValues();
+  var v = sh.getDataRange().getDisplayValues();
   var out = [];
   for (var i = 1; i < v.length; i++) {
-    if (v[i][0]) out.push({ ma: String(v[i][0]).trim(), ten: String(v[i][1] || ''), role: String(v[i][2] || 'Giáo viên') });
+    if (String(v[i][0]).trim()) out.push({ ma: String(v[i][0]).trim(), ten: String(v[i][1] || ''), role: String(v[i][2] || 'Giáo viên') });
   }
   return out;
 }
@@ -66,7 +66,9 @@ function getLichHomNay(ma) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('LICHLAM');
   if (!sh) return [];
   var thu = weekDay(new Date()); // T2..CN
-  var v = sh.getDataRange().getValues();
+  // Đọc chuỗi HIỂN THỊ (08:00) thay vì giá trị thô, vì Sheets hay tự đổi
+  // ô giờ thành kiểu Date năm 1899 với múi giờ cũ GMT+0642 -> lệch 8:00 thành 8:24
+  var v = sh.getDataRange().getDisplayValues();
   var out = [];
   if (v.length < 2) return out;
   var ncols = v[0].length;
@@ -257,7 +259,7 @@ function getChuaCham(ngayStr) { // 'dd/MM/yyyy'
   var shC = ss.getSheetByName('CHECK IN');
   if (!shL || shL.getLastRow() < 2) return [];
   var thu = weekDay(parseVNDate(ngayStr));
-  var lv = shL.getDataRange().getValues();
+  var lv = shL.getDataRange().getDisplayValues();
   var nc = lv[0].length;
   var lich = {};
   for (var i = 1; i < lv.length; i++) {

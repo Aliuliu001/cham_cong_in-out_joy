@@ -95,6 +95,11 @@ function xemNgay() {
   var ngay = document.getElementById('ngay').value.trim() || homNay();
   var kq = document.getElementById('kqNgay');
   kq.textContent = 'Đang tải...';
+  var loi = function (e) {
+    kq.innerHTML = '<p style="color:#c00;font-weight:bold">Không tải được báo cáo: ' +
+      ((e && e.message) || 'máy bận, bạn bấm Xem lại giúp mình.') +
+      '<br><span style="font-weight:normal">Nếu vẫn lỗi, bạn mở Apps Script → Triển khai → chọn Phiên bản mới nhất rồi thử lại.</span></p>';
+  };
   google.script.run.withSuccessHandler(function (rs) {
     google.script.run.withSuccessHandler(function (vang) {
       var soTre = 0, soQuen = 0;
@@ -125,8 +130,8 @@ function xemNgay() {
           vang.map(function (v) { return v.ma + ' ' + v.ten + ' (' + v.cas.join(', ') + ')'; }).join('<br>') + '</div>';
       }
       kq.innerHTML = h;
-    }).getChuaCham(ngay);
-  }).getBaoCaoNgay(ngay);
+      }).withFailureHandler(loi).getChuaCham(ngay);
+  }).withFailureHandler(loi).getBaoCaoNgay(ngay);
 }
 function xemThang() {
   var ma = document.getElementById('thangMa').value;
@@ -147,6 +152,9 @@ function xemThang() {
       (r.chiTiet.length ? '<table><tr><th>Ngày</th><th>Ca</th><th>Giờ</th></tr>' +
         r.chiTiet.map(function (c) { return '<tr><td>' + c.ngay + '</td><td>' + c.ca + '</td><td>' + c.gio + 'h</td></tr>'; }).join('') +
         '</table>' : '<p>Chưa có ca nào tính được giờ (cần đủ cặp VÀO → RA).</p>');
+  }).withFailureHandler(function (e) {
+    kq.innerHTML = '<p style="color:#c00;font-weight:bold">Không tải được: ' +
+      ((e && e.message) || 'máy bận, bạn bấm Xem lại giúp mình.') + '</p>';
   }).getBaoCaoThang(ma, th);
 }
 </script>
