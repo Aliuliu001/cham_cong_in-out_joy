@@ -160,7 +160,9 @@ function checkReady() {
   document.getElementById('btn').disabled = !ok;
 }
 
-document.getElementById('btn').onclick = function () {
+document.getElementById('btn').onclick = function () { guiCheckin(); };
+
+function guiCheckin() {
   var m = document.getElementById('msg');
   var btn = document.getElementById('btn');
   m.className = ''; m.textContent = 'Đang gửi... (tầm 10-20 giây, đừng tắt trang)';
@@ -186,10 +188,15 @@ document.getElementById('btn').onclick = function () {
         (r.lateMin > 0 ? '<br>⏰ Trễ: ' + r.lateMin + ' phút' : '');
       document.getElementById('btn').style.display = 'none';
     } else if (r.needConfirm) {
-      if (confirm(r.msg)) { confirmed = true; document.getElementById('btn').click(); }
+      clearTimeout(timeoutId);
+      btn.disabled = false;
+      if (confirm(r.msg)) { confirmed = true; guiCheckin(); }
+      else { m.className = ''; m.textContent = ''; }
     } else {
+      clearTimeout(timeoutId);
       m.className = 'err';
       m.textContent = (r.outOfRange ? '❌ ' : '') + r.msg;
+      btn.disabled = false;
     }
   }).submitCheckin({
     ma: document.getElementById('ma').value,
