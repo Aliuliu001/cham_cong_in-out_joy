@@ -14,14 +14,14 @@ var TZ = 'Asia/Ho_Chi_Minh';
 
 function doGet(e) {
   var page = (e && e.parameter && e.parameter.page) || 'index';
+  var out;
   if (page === 'baocao') {
-    return HtmlService.createHtmlOutputFromFile('BaoCao')
-      .setTitle('Báo cáo chấm công')
-      .setViewport('width=device-width, initial-scale=1');
+    out = HtmlService.createHtmlOutputFromFile('BaoCao').setTitle('Báo cáo chấm công');
+  } else {
+    out = HtmlService.createHtmlOutputFromFile('Index').setTitle('Check-in Joy');
   }
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('Check-in Joy')
-    .setViewport('width=device-width, initial-scale=1');
+  out.addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  return out;
 }
 
 /* ---------- Setup 1 lần ---------- */
