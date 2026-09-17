@@ -101,7 +101,12 @@ function getLichHomNay(ma) {
 // Chuẩn hóa ô giờ: Sheets hay trả về Date dài dòng kiểu
 // "Sat Dec 30 1899...GMT+0642 (Indochina Time)" -> rút về "HH:mm"
 function fmtTimeCell(x) {
-  if (x instanceof Date) return Utilities.formatDate(x, TZ, 'HH:mm');
+  if (x instanceof Date) {
+    // Google Sheets trả về Date object với giờ UTC bị lệch múi giờ,
+    // ta lấy giờ UTC trực tiếp (getUTCHours, getUTCMinutes) để khớp đúng 8:00
+    var h = x.getUTCHours(), m = x.getUTCMinutes();
+    return ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+  }
   var s = String(x == null ? '' : x).trim();
   var m = s.match(/(\d{1,2})\s*:\s*(\d\d)/);
   if (m) return ('0' + m[1]).slice(-2) + ':' + m[2];
