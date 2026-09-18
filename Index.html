@@ -183,9 +183,9 @@ function guiCheckin() {
     clearTimeout(timeoutId);
     if (r.ok) {
       m.className = 'ok';
-      m.innerHTML = '✅ CHECK IN THÀNH CÔNG!<br>🕐 Thời gian: ' + r.time +
+      m.innerHTML = '✅ CHECK ' + (r.type === 'OUT' ? 'OUT' : 'IN') + ' THÀNH CÔNG!<br>🕐 Thời gian: ' + r.time +
         '<br>📍 Khoảng cách: ' + r.distance + ' m' +
-        (r.lateMin > 0 ? '<br>⏰ Trễ: ' + r.lateMin + ' phút' : '');
+        (r.type === 'IN' && r.lateMin > 0 ? '<br>⏰ Trễ: ' + r.lateMin + ' phút' : '');
       document.getElementById('btn').style.display = 'none';
     } else if (r.needConfirm) {
       clearTimeout(timeoutId);
