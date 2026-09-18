@@ -62,7 +62,7 @@
 
 <script>
 var openTs = 0, openText = '', lat = 0, lng = 0, acc = 0, photoB64 = '',
-    loai = '', caBd = '', caLabel = '', confirmed = false;
+    loai = '', caBd = '', caLabel = '', autoOutDone = false, autoOutData = null;
 var nvMap = {};
 
 function chon(t) {
@@ -187,11 +187,21 @@ function guiCheckin() {
         '<br>📍 Khoảng cách: ' + r.distance + ' m' +
         (r.type === 'IN' && r.lateMin > 0 ? '<br>⏰ Trễ: ' + r.lateMin + ' phút' : '');
       document.getElementById('btn').style.display = 'none';
-    } else if (r.needConfirm) {
+    } else if (r.needAutoOut) {
       clearTimeout(timeoutId);
       btn.disabled = false;
-      if (confirm(r.msg)) { confirmed = true; guiCheckin(); }
-      else { m.className = ''; m.textContent = ''; }
+      var msg = r.msg + '\n\nBấm OK để tự động OUT ca cũ và IN ca mới.';
+      if (confirm(msg)) {
+        autoOutDone = true;
+        autoOutData = {
+          ten: document.getElementById('ten').value,
+          ca: r.caCu,
+          outTime: r.caKtCu
+        };
+        guiCheckin();
+      } else {
+        m.className = ''; m.textContent = '';
+      }
     } else {
       clearTimeout(timeoutId);
       m.className = 'err';
@@ -203,7 +213,7 @@ function guiCheckin() {
     ten: document.getElementById('ten').value,
     lat: lat, lng: lng, photo: photoB64, type: loai,
     openTs: openTs, openText: openText, submitText: submitText,
-    caBd: caBd, caLabel: caLabel, confirmed: confirmed
+    caBd: caBd, caLabel: caLabel, autoOutDone: autoOutDone, autoOutData: autoOutData
   }).withFailureHandler(function (e) {
     clearTimeout(timeoutId);
     m.className = 'err';

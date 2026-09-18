@@ -29,8 +29,7 @@ function doGet(e) {
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureTab(ss, 'CHECK IN',
-    ['Mã NV', 'Họ tên', 'Giờ mở trang', 'Vĩ độ', 'Kinh độ', 'Link ảnh',
-     'Khoảng cách (m)', 'Giờ bấm nút', 'Loại IN/OUT', 'Ca', 'Trễ (phút)', 'Ghi chú']);
+    ['Mã NV', 'Họ tên', 'Ca', 'Loại IN/OUT', 'Giờ check in', 'Giờ check out', 'Trễ (phút)', 'Ghi chú', 'Link ảnh', 'Khoảng cách (m)']);
   ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ tên', 'Vai trò (Giáo viên/Văn phòng)']);
   ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
 }
@@ -155,23 +154,37 @@ function submitCheckin(p) {
   var sh = ss.getSheetByName('CHECK IN');
   var todayStr = fmtD(new Date(p.openTs || new Date().getTime()));
 
-  // Chống VÀO 2 lần khi chưa RA: tìm IN hôm nay chưa có OUT sau nó
+  // Tự động OUT ca cũ nếu quên OUT
   var note = '';
-  if (p.type === 'IN' && !p.confirmed) {
+  var autoOutRow = null;
+  if (p.type === 'IN' && !p.autoOutDone) {
     var rows = sh.getDataRange().getValues();
     for (var i = rows.length - 1; i >= 1; i--) {
       if (!rows[i][0]) continue;
-      if (String(rows[i][0]).trim() === p.ma && cellDay(rows[i][2]) === todayStr) {
-        if (rows[i][8] === 'IN') {
-          return { ok: false, needConfirm: true,
-            msg: 'Ca trước bạn chưa bấm RA. Nhớ check out nhé! Bạn có chắc muốn VÀO ca mới không?' };
+      var rowDay = cellDay(rows[i][4]); // Cột mới: Giờ check in
+      if (String(rows[i][0]).trim() === p.ma && rowDay === todayStr) {
+        if (rows[i][3] === 'IN') { // Cột mới: Loại IN/OUT
+          // Tìm ca cũ chưa OUT
+          var caCu = String(rows[i][2]); // Cột mới: Ca
+          var caBdCu = caBdFromLabel(caCu);
+          var caKtCu = caKtFromLabel(caCu);
+          if (!caKtCu) caKtCu = '17:00'; // Mặc định nếu không parse được
+          return { ok: false, needAutoOut: true, caCu: caCu, caKtCu: caKtCu,
+            msg: 'Ca ' + caCu + ' chưa OUT. Hệ thống sẽ tự động OUT lúc ' + caKtCu };
         }
         break;
       }
-      if (String(rows[i][0]).trim() === p.ma && cellDay(rows[i][2]) !== todayStr) break;
+      if (String(rows[i][0]).trim() === p.ma && rowDay !== todayStr) break;
     }
   }
-  if (p.confirmed) note = 'VÀO ca mới khi ca trước chưa RA (quên RA)';
+  
+  // Xử lý auto OUT
+  if (p.autoOutDone && p.autoOutData) {
+    var a = p.autoOutData;
+    sh.appendRow([p.ma, a.ten, a.ca, 'OUT', '', a.outTime, 0, '⚠️ Quên check out (Hệ thống tự OUT)', '', '']);
+  }
+  
+  if (p.autoOutDone) note = 'VÀO ca mới sau khi hệ thống tự OUT ca trước';
 
   var lateMin = 0;
   if (p.type === 'IN' && p.caBd) {
@@ -187,8 +200,11 @@ function submitCheckin(p) {
   var blob = Utilities.newBlob(Utilities.base64Decode(p.photo), 'image/jpeg', fname);
   var file = folder.createFile(blob);
 
-  sh.appendRow([p.ma, p.ten, p.openText, p.lat, p.lng, file.getUrl(),
-    distM, p.submitText, p.type, p.caLabel || '', lateMin, note]);
+  // Thứ tự mới: Mã, Tên, Ca, Loại IN/OUT, Giờ check in, Giờ check out, Trễ, Ghi chú, Link ảnh, Khoảng cách
+  var checkInTime = p.type === 'IN' ? p.openText : '';
+  var checkOutTime = p.type === 'OUT' ? p.openText : '';
+  
+  sh.appendRow([p.ma, p.ten, p.caLabel || '', p.type, checkInTime, checkOutTime, lateMin, note, file.getUrl(), distM]);
 
   return { ok: true, time: p.openText, distance: distM, lateMin: lateMin, type: p.type };
 }
@@ -207,14 +223,19 @@ function getBaoCaoNgay(ngayStr) {
   if (!sh || sh.getLastRow() < 2) return [];
   var v = sh.getDataRange().getValues();
   var map = {};
+  // Thứ tự cột mới: 0:Mã, 1:Tên, 2:Ca, 3:Loại, 4:Check in, 5:Check out, 6:Trễ, 7:Ghi chú, 8:Link ảnh, 9:Khoảng cách
   for (var i = 1; i < v.length; i++) {
     if (!v[i][0]) continue;
-    if (cellDay(v[i][2]) !== ngayStr) continue;
+    var dayIn = cellDay(v[i][4]);
+    var dayOut = cellDay(v[i][5]);
+    var day = dayIn || dayOut;
+    if (day !== ngayStr) continue;
     var ma = String(v[i][0]).trim();
     if (!map[ma]) map[ma] = { ma: ma, ten: String(v[i][1]), logs: [] };
-    map[ma].logs.push({ gio: cellHM(v[i][2]), type: String(v[i][8]),
-      ca: String(v[i][9]), tre: Number(v[i][10] || 0), kc: Number(v[i][6] || 0),
-      anh: String(v[i][5] || ''), note: String(v[i][11] || '') });
+    var gio = cellHM(v[i][4] || v[i][5]);
+    map[ma].logs.push({ gio: gio, type: String(v[i][3]),
+      ca: String(v[i][2]), tre: Number(v[i][6] || 0), kc: Number(v[i][9] || 0),
+      anh: String(v[i][8] || ''), note: String(v[i][7] || '') });
   }
   var out = [];
   for (var k in map) {
@@ -269,7 +290,8 @@ function getChuaCham(ngayStr) {
   if (shC && shC.getLastRow() >= 2) {
     var cv = shC.getDataRange().getValues();
     for (var j = 1; j < cv.length; j++) {
-      if (cellDay(cv[j][2]) === ngayStr && String(cv[j][8]) === 'IN') daCham[String(cv[j][0]).trim()] = 1;
+      var dayIn = cellDay(cv[j][4]); // Cột mới: Giờ check in
+      if (dayIn === ngayStr && String(cv[j][3]) === 'IN') daCham[String(cv[j][0]).trim()] = 1; // Cột 3: Loại
     }
   }
   var out = [];
@@ -284,16 +306,23 @@ function getBaoCaoThang(ma, thangStr) {
   if (!sh || sh.getLastRow() < 2) return res;
   var v = sh.getDataRange().getValues();
   var rows = [];
+  // Cột mới: 0:Mã, 1:Tên, 2:Ca, 3:Loại, 4:Check in, 5:Check out, 6:Trễ, 7:Ghi chú
   for (var i = 1; i < v.length; i++) {
     if (!v[i][0]) continue;
     if (String(v[i][0]).trim() !== ma) continue;
-    if (cellMY(v[i][2]) !== thangStr) continue;
-    rows.push({ gio: cellDT(v[i][2]), type: String(v[i][8]), ca: String(v[i][9]),
-      bd: caBdFromLabel(String(v[i][9])), kt: caKtFromLabel(String(v[i][9])), tre: Number(v[i][10] || 0) });
+    var dayIn = cellDay(v[i][4]);
+    var dayOut = cellDay(v[i][5]);
+    var monthIn = cellMY(v[i][4]);
+    var monthOut = cellMY(v[i][5]);
+    var month = monthIn || monthOut;
+    if (month !== thangStr) continue;
+    var day = dayIn || dayOut;
+    rows.push({ ngay: day, gio: cellHM(v[i][4] || v[i][5]), type: String(v[i][3]), ca: String(v[i][2]),
+      bd: caBdFromLabel(String(v[i][2])), kt: caKtFromLabel(String(v[i][2])), tre: Number(v[i][6] || 0) });
   }
   var byDay = {};
   rows.forEach(function (r) {
-    var d = r.gio.substring(0, 10);
+    var d = r.ngay;
     if (!byDay[d]) byDay[d] = [];
     byDay[d].push(r);
   });
