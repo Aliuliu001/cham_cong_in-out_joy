@@ -130,8 +130,8 @@ function xemNgay() {
           r.caps.forEach(function (c, i) {
             h += '<tr>' + (i === 0 ? '<td rowspan="' + r.caps.length + '"><b>' + r.ma + '</b><br>' + r.ten + '</td>' : '') +
               '<td>' + c.vao + ' → ' + c.ra + '</td><td>' + (c.ca || '—') + '</td><td>' +
-              (c.tre > 0 ? '<span class="tre">Trễ ' + c.tre + 'p</span>' : '<span class="okc">Đúng giờ</span>') +
-              (c.thieuRA ? '<br><span class="tre">⚠️ Nhớ check out nhé!</span>' : '') +
+              (c.tre > 0 ? '<span class="tre">⏰ Trễ</span>' : '<span class="okc">✓ Đúng giờ</span>') +
+              (c.thieuRA ? '<br><span class="tre">⚠️ Nhớ check out' + (c.ca ? ' ca ' + c.ca : '') + ' nhé!</span>' : '') +
               (c.anh ? '<br><a class="anh" href="' + c.anh + '" target="_blank">Xem ảnh</a>' : '') +
               '</td></tr>';
           });
