@@ -7,7 +7,7 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #F6F3EE; font-family: -apple-system, Arial, sans-serif; color: #333; }
-  .box { max-width: 680px; margin: 16px auto; background: #fff; border-radius: 18px;
+  .box { max-width: 720px; margin: 16px auto; background: #fff; border-radius: 18px;
          box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 25px; }
   h1 { text-align: center; margin: 0 0 6px; font-size: 22px; color: #5C4A3A; }
   .sub { text-align: center; color: #888; font-size: 14px; margin-bottom: 14px; }
@@ -15,8 +15,8 @@
   .tabs button { flex: 1; padding: 12px; font-size: 16px; font-weight: bold; border-radius: 12px;
     border: 2px solid #ddd; background: #fff; color: #555; }
   .tabs button.on { border-color: #5C4A3A; background: #F6F3EE; color: #5C4A3A; }
-  .row { display: flex; gap: 8px; margin-bottom: 10px; }
-  input, select { flex: 1; padding: 12px; font-size: 16px; border-radius: 10px; border: 1px solid #ccc; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
+  input { flex: 1; padding: 12px; font-size: 16px; border-radius: 10px; border: 1px solid #ccc; }
   .go { border: none; background: #5C4A3A; color: #fff; font-weight: bold; border-radius: 10px; padding: 12px 18px; font-size: 16px; }
   .cards { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
   .card { flex: 1; min-width: 100px; background: #F6F3EE; border-radius: 12px; padding: 10px; text-align: center; }
@@ -38,13 +38,15 @@
   <h1>📊 Báo cáo chấm công</h1>
   <div class="sub" id="today"></div>
   <div class="tabs">
-    <button id="tabNgay" class="on" onclick="doiTab('ngay')">Hôm nay</button>
-    <button id="tabThang" onclick="doiTab('thang')">Cả tháng</button>
+    <button id="tabNgay" class="on" onclick="doiTab('ngay')">Hôm nay (Ngày)</button>
+    <button id="tabThang" onclick="doiTab('thang')">Tổng hợp Tháng</button>
   </div>
 
   <div id="pNgay">
     <div class="row">
-      <input id="ngay" placeholder="Ngày: 11/09/2026">
+      <label style="font-weight:bold; min-width:50px;">Chọn ngày:</label>
+      <input type="date" id="ngayPicker" onchange="chonNgayPicker()">
+      <input id="ngay" placeholder="dd/MM/yyyy" style="max-width:130px">
       <button class="go" onclick="xemNgay()">Xem</button>
     </div>
     <div id="kqNgay"></div>
@@ -52,9 +54,9 @@
 
   <div id="pThang" style="display:none">
     <div class="row">
-      <select id="thangMa"><option value="">-- Chọn nhân viên --</option></select>
-      <input id="thang" placeholder="Tháng: 09/2026" style="max-width:130px">
-      <button class="go" onclick="xemThang()">Xem</button>
+      <label style="font-weight:bold; min-width:50px;">Chọn tháng:</label>
+      <input id="thang" placeholder="MM/yyyy (VD: 09/2026)" style="max-width:160px">
+      <button class="go" onclick="xemThang()">Xem tất cả</button>
     </div>
     <div id="kqThang"></div>
   </div>
@@ -68,6 +70,7 @@ function doiTab(t) {
   document.getElementById('tabThang').className = t === 'thang' ? 'on' : '';
   document.getElementById('pNgay').style.display = t === 'ngay' ? '' : 'none';
   document.getElementById('pThang').style.display = t === 'thang' ? '' : 'none';
+  if (t === 'thang' && !document.getElementById('kqThang').innerHTML) xemThang();
 }
 function homNay() {
   var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -77,28 +80,38 @@ function thangNay() {
   var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
   return p(d.getMonth() + 1) + '/' + d.getFullYear();
 }
+function toISO(vn) {
+  var p = vn.split('/');
+  return p.length === 3 ? p[2] + '-' + p[1] + '-' + p[0] : '';
+}
+function toVN(iso) {
+  var p = iso.split('-');
+  return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : '';
+}
+function chonNgayPicker() {
+  var iso = document.getElementById('ngayPicker').value;
+  if (iso) {
+    document.getElementById('ngay').value = toVN(iso);
+    xemNgay();
+  }
+}
 window.onload = function () {
   document.getElementById('today').textContent = 'Hôm nay: ' + homNay();
-  document.getElementById('ngay').value = homNay();
+  var h = homNay();
+  document.getElementById('ngay').value = h;
+  document.getElementById('ngayPicker').value = toISO(h);
   document.getElementById('thang').value = thangNay();
-  google.script.run.withSuccessHandler(function (list) {
-    var s = document.getElementById('thangMa');
-    list.forEach(function (n) {
-      var o = document.createElement('option');
-      o.value = n.ma; o.textContent = n.ma + ' - ' + n.ten;
-      s.appendChild(o);
-    });
-  }).getNhanVienList();
   xemNgay();
 };
 function xemNgay() {
   var ngay = document.getElementById('ngay').value.trim() || homNay();
+  var iso = toISO(ngay);
+  if (iso) document.getElementById('ngayPicker').value = iso;
   var kq = document.getElementById('kqNgay');
   kq.textContent = 'Đang tải...';
   var loi = function (e) {
     kq.innerHTML = '<p style="color:#c00;font-weight:bold">Không tải được báo cáo: ' +
-      ((e && e.message) || 'máy bận, bạn bấm Xem lại giúp mình.') +
-      '<br><span style="font-weight:normal">Nếu vẫn lỗi, bạn mở Apps Script → Triển khai → chọn Phiên bản mới nhất rồi thử lại.</span></p>';
+      ((e && e.message) || 'máy bận, bạn bấm Xem lại giúp mình.') + '</p>';
   };
   google.script.run.withSuccessHandler(function (rs) {
     google.script.run.withSuccessHandler(function (vang) {
@@ -107,7 +120,7 @@ function xemNgay() {
       var h = '<div class="cards">' +
         '<div class="card"><b>' + rs.length + '</b><span>Đã chấm</span></div>' +
         '<div class="card' + (soTre ? ' warn' : '') + '"><b>' + soTre + '</b><span>Ca trễ</span></div>' +
-        '<div class="card' + (soQuen ? ' warn' : '') + '"><b>' + soQuen + '</b><span>Quên RA</span></div>' +
+        '<div class="card' + (soQuen ? ' warn' : '') + '"><b>' + soQuen + '</b><span>Nhớ check out</span></div>' +
         '<div class="card' + (vang.length ? ' warn' : '') + '"><b>' + vang.length + '</b><span>Chưa chấm</span></div>' +
         '</div>';
       if (!rs.length) h += '<p>Chưa ai chấm ngày này.</p>';
@@ -118,7 +131,7 @@ function xemNgay() {
             h += '<tr>' + (i === 0 ? '<td rowspan="' + r.caps.length + '"><b>' + r.ma + '</b><br>' + r.ten + '</td>' : '') +
               '<td>' + c.vao + ' → ' + c.ra + '</td><td>' + (c.ca || '—') + '</td><td>' +
               (c.tre > 0 ? '<span class="tre">Trễ ' + c.tre + 'p</span>' : '<span class="okc">Đúng giờ</span>') +
-              (c.thieuRA ? '<br><span class="tre">Quên RA</span>' : '') +
+              (c.thieuRA ? '<br><span class="tre">⚠️ Nhớ check out nhé!</span>' : '') +
               (c.anh ? '<br><a class="anh" href="' + c.anh + '" target="_blank">Xem ảnh</a>' : '') +
               '</td></tr>';
           });
@@ -130,32 +143,35 @@ function xemNgay() {
           vang.map(function (v) { return v.ma + ' ' + v.ten + ' (' + v.cas.join(', ') + ')'; }).join('<br>') + '</div>';
       }
       kq.innerHTML = h;
-      }).withFailureHandler(loi).getChuaCham(ngay);
+    }).withFailureHandler(loi).getChuaCham(ngay);
   }).withFailureHandler(loi).getBaoCaoNgay(ngay);
 }
 function xemThang() {
-  var ma = document.getElementById('thangMa').value;
   var th = document.getElementById('thang').value.trim() || thangNay();
   var kq = document.getElementById('kqThang');
-  if (!ma) { alert('Chọn nhân viên trước'); return; }
   kq.textContent = 'Đang tải...';
-  google.script.run.withSuccessHandler(function (r) {
-    kq.innerHTML =
-      '<p><b>' + ma + ' — tháng ' + r.thang + '</b></p>' +
-      '<div class="cards">' +
-      '<div class="card"><b>' + r.tongGio + 'h</b><span>Tổng giờ (' + r.soCa + ' ca)</span></div>' +
-      '<div class="card' + (r.soLanTre ? ' warn' : '') + '"><b>' + r.soLanTre + '</b><span>Lần trễ</span></div>' +
-      '<div class="card' + (r.soLanQuenRA ? ' warn' : '') + '"><b>' + r.soLanQuenRA + '</b><span>Quên RA</span></div>' +
-      '<div class="card' + (r.kpi === 0 ? ' warn' : '') + '"><b>' + r.kpi + '%</b><span>KPI</span></div>' +
-      '</div>' +
-      (r.soLanTre >= 4 ? '<p class="tre">Trễ từ 4 lần → KPI giờ làm = 0%.</p>' : '') +
-      (r.chiTiet.length ? '<table><tr><th>Ngày</th><th>Ca</th><th>Giờ</th></tr>' +
-        r.chiTiet.map(function (c) { return '<tr><td>' + c.ngay + '</td><td>' + c.ca + '</td><td>' + c.gio + 'h</td></tr>'; }).join('') +
-        '</table>' : '<p>Chưa có ca nào tính được giờ (cần đủ cặp VÀO → RA).</p>');
-  }).withFailureHandler(function (e) {
-    kq.innerHTML = '<p style="color:#c00;font-weight:bold">Không tải được: ' +
+  var loi = function (e) {
+    kq.innerHTML = '<p style="color:#c00;font-weight:bold">Không tải được báo cáo: ' +
       ((e && e.message) || 'máy bận, bạn bấm Xem lại giúp mình.') + '</p>';
-  }).getBaoCaoThang(ma, th);
+  };
+  google.script.run.withSuccessHandler(function (list) {
+    if (!list.length) { kq.innerHTML = '<p>Chưa có dữ liệu tháng này.</p>'; return; }
+    var h = '<p><b>Bảng tổng hợp tất cả nhân viên — Tháng ' + th + '</b></p>';
+    h += '<table><tr><th>Mã</th><th>Họ tên</th><th>Tổng giờ</th><th>Số ca</th><th>Lần trễ</th><th>Chưa OUT</th><th>KPI</th></tr>';
+    list.forEach(function (r) {
+      h += '<tr>' +
+        '<td><b>' + r.ma + '</b></td>' +
+        '<td>' + r.ten + '</td>' +
+        '<td><b>' + r.tongGio + 'h</b></td>' +
+        '<td>' + r.soCa + '</td>' +
+        '<td class="' + (r.soLanTre ? 'tre' : '') + '">' + r.soLanTre + '</td>' +
+        '<td class="' + (r.soLanQuenRA ? 'tre' : '') + '">' + r.soLanQuenRA + '</td>' +
+        '<td class="' + (r.kpi === 0 ? 'tre' : 'okc') + '"><b>' + r.kpi + '%</b></td>' +
+        '</tr>';
+    });
+    h += '</table>';
+    kq.innerHTML = h;
+  }).withFailureHandler(loi).getBaoCaoThangTatCa(th);
 }
 </script>
 </body>

@@ -60,14 +60,10 @@ function getNhanVienList() {
 }
 
 // Lịch của 1 nhân viên trong ngày hôm nay (theo cột Ngày T2..CN hoặc Cả ngày)
-// Sheet chuẩn 6 cột: A Mã, B Tên, C Ngày, D Ca, E GiờBD, F GiờKT
-// Tương thích ngược sheet 7 cột cũ (có thêm cột Thứ): tự nhận diện.
 function getLichHomNay(ma) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('LICHLAM');
   if (!sh) return [];
   var thu = weekDay(new Date()); // T2..CN
-  // Đọc chuỗi HIỂN THỊ (08:00) thay vì giá trị thô, vì Sheets hay tự đổi
-  // ô giờ thành kiểu Date năm 1899 với múi giờ cũ GMT+0642 -> lệch 8:00 thành 8:24
   var v = sh.getDataRange().getDisplayValues();
   var out = [];
   if (v.length < 2) return out;
@@ -75,12 +71,12 @@ function getLichHomNay(ma) {
   for (var i = 1; i < v.length; i++) {
     if (String(v[i][0]).trim() !== ma) continue;
     var ngayCell, caCell, bd, kt;
-    if (ncols >= 7) { // sheet cũ: A Mã B Tên C Thứ D Ngày E Ca F BD G KT
+    if (ncols >= 7) { // sheet cũ 7 cột (A Mã B Tên C Thứ D Ngày E Ca F BD G KT)
       ngayCell = String(v[i][3]).trim();
       caCell = String(v[i][4] || '');
       bd = fmtTimeCell(v[i][5]); kt = fmtTimeCell(v[i][6]);
       if (!matchDay(String(v[i][2]).trim(), thu)) continue;
-    } else { // sheet chuẩn 6 cột
+    } else { // sheet chuẩn 6 cột (A Mã B Tên C Ngày D Ca E BD F KT)
       ngayCell = String(v[i][2]).trim();
       caCell = String(v[i][3] || '');
       bd = fmtTimeCell(v[i][4]); kt = fmtTimeCell(v[i][5]);
@@ -98,19 +94,13 @@ function getLichHomNay(ma) {
   return out;
 }
 
-// Chuẩn hóa ô giờ: Sheets hay trả về Date dài dòng kiểu
-// "Sat Dec 30 1899...GMT+0642 (Indochina Time)" -> rút về "HH:mm"
 function fmtTimeCell(x) {
-  if (x instanceof Date) {
-    // Nếu Sheets trả về Date object, định dạng thẳng theo múi giờ VN (Asia/Ho_Chi_Minh)
-    return Utilities.formatDate(x, TZ, 'HH:mm');
-  }
+  if (x instanceof Date) return Utilities.formatDate(x, TZ, 'HH:mm');
   var s = String(x == null ? '' : x).trim();
   var m = s.match(/(\d{1,2})\s*:\s*(\d\d)/);
   if (m) return ('0' + m[1]).slice(-2) + ':' + m[2];
   return s;
 }
-// Ngày của ô giờ mở trang (chịu cả Date object lẫn chuỗi dd/MM/yyyy...)
 function cellDay(x) {
   if (x instanceof Date) return Utilities.formatDate(x, TZ, 'dd/MM/yyyy');
   return String(x || '').substring(0, 10);
@@ -121,15 +111,15 @@ function cellHM(x) {
   var m = s.match(/(\d\d:\d\d)/);
   return m ? m[1] : s;
 }
-function cellMY(x) { // 'MM/yyyy' của ô giờ
+function cellMY(x) { // 'MM/yyyy'
   if (x instanceof Date) return Utilities.formatDate(x, TZ, 'MM/yyyy');
   return String(x || '').substring(3, 10);
 }
-function cellDT(x) { // 'dd/MM/yyyy HH:mm:ss' chuẩn để parseVN dùng
+function cellDT(x) { // 'dd/MM/yyyy HH:mm:ss'
   if (x instanceof Date) return Utilities.formatDate(x, TZ, 'dd/MM/yyyy HH:mm:ss');
   return String(x || '');
 }
-function parseVNDate(s) { // 'dd/MM/yyyy' -> Date
+function parseVNDate(s) {
   var m = String(s).match(/(\d\d)\/(\d\d)\/(\d{4})/);
   return m ? new Date(m[3], m[2] - 1, m[1]) : new Date();
 }
@@ -166,7 +156,6 @@ function submitCheckin(p) {
   var todayStr = fmtD(new Date(p.openTs || new Date().getTime()));
 
   // Chống VÀO 2 lần khi chưa RA: tìm IN hôm nay chưa có OUT sau nó
-  // (so sánh theo ngày đã chuẩn hóa vì Sheets hay tự đổi chuỗi giờ thành kiểu Date)
   var note = '';
   if (p.type === 'IN' && !p.confirmed) {
     var rows = sh.getDataRange().getValues();
@@ -175,16 +164,15 @@ function submitCheckin(p) {
       if (String(rows[i][0]).trim() === p.ma && cellDay(rows[i][2]) === todayStr) {
         if (rows[i][8] === 'IN') {
           return { ok: false, needConfirm: true,
-            msg: 'Ca trước bạn chưa bấm RA. Có chắc muốn VÀO ca mới không?' };
+            msg: 'Ca trước bạn chưa bấm RA. Nhớ check out nhé! Bạn có chắc muốn VÀO ca mới không?' };
         }
-        break; // log gần nhất trong ngày đã là OUT -> ok
+        break;
       }
       if (String(rows[i][0]).trim() === p.ma && cellDay(rows[i][2]) !== todayStr) break;
     }
   }
   if (p.confirmed) note = 'VÀO ca mới khi ca trước chưa RA (quên RA)';
 
-  // Tính trễ (chỉ cho IN có ca)
   var lateMin = 0;
   if (p.type === 'IN' && p.caBd) {
     var role = getRole(p.ma);
@@ -193,7 +181,6 @@ function submitCheckin(p) {
     lateMin = Math.max(0, Math.round((p.openTs - chuan) / 60000));
   }
 
-  // Lưu ảnh -> Drive
   var folder = getFolder();
   var ext = 'jpg';
   var fname = p.ma + '_' + fmtFile(new Date(p.openTs)) + '_' + p.type + '.' + ext;
@@ -210,13 +197,12 @@ function getFolder() {
   var it = DriveApp.getFoldersByName(DRIVE_FOLDER);
   if (it.hasNext()) return it.next();
   var f = DriveApp.createFolder(DRIVE_FOLDER);
-  // Mặc định Restricted (chỉ người được share mới xem) — đúng ý trung tâm
   return f;
 }
 
 /* ---------- Báo cáo ngày / tháng ---------- */
 
-function getBaoCaoNgay(ngayStr) { // 'dd/MM/yyyy' — so sánh theo ngày đã chuẩn hóa (chịu được cả ô Date lẫn chuỗi)
+function getBaoCaoNgay(ngayStr) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN');
   if (!sh || sh.getLastRow() < 2) return [];
   var v = sh.getDataRange().getValues();
@@ -234,7 +220,6 @@ function getBaoCaoNgay(ngayStr) { // 'dd/MM/yyyy' — so sánh theo ngày đã c
   for (var k in map) {
     var r = map[k];
     r.logs.sort(function (a, b) { return a.gio < b.gio ? -1 : 1; });
-    // Ghép cặp IN->OUT để hiện 1 dòng 1 ca
     var caps = [], openIn = null;
     r.logs.forEach(function (l) {
       if (l.type === 'IN') {
@@ -255,8 +240,7 @@ function getBaoCaoNgay(ngayStr) { // 'dd/MM/yyyy' — so sánh theo ngày đã c
   return out;
 }
 
-// Ai có lịch hôm đó mà chưa thấy VÀO -> danh sách "chưa chấm"
-function getChuaCham(ngayStr) { // 'dd/MM/yyyy'
+function getChuaCham(ngayStr) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var shL = ss.getSheetByName('LICHLAM');
   var shC = ss.getSheetByName('CHECK IN');
@@ -294,7 +278,7 @@ function getChuaCham(ngayStr) { // 'dd/MM/yyyy'
   return out;
 }
 
-function getBaoCaoThang(ma, thangStr) { // thangStr 'MM/yyyy'
+function getBaoCaoThang(ma, thangStr) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN');
   var res = { ma: ma, thang: thangStr, tongGio: 0, soCa: 0, soLanTre: 0, soLanQuenRA: 0, kpi: 100, chiTiet: [] };
   if (!sh || sh.getLastRow() < 2) return res;
@@ -307,7 +291,6 @@ function getBaoCaoThang(ma, thangStr) { // thangStr 'MM/yyyy'
     rows.push({ gio: cellDT(v[i][2]), type: String(v[i][8]), ca: String(v[i][9]),
       bd: caBdFromLabel(String(v[i][9])), kt: caKtFromLabel(String(v[i][9])), tre: Number(v[i][10] || 0) });
   }
-  // Ghép cặp IN->OUT theo ngày
   var byDay = {};
   rows.forEach(function (r) {
     var d = r.gio.substring(0, 10);
@@ -318,7 +301,7 @@ function getBaoCaoThang(ma, thangStr) { // thangStr 'MM/yyyy'
     var day = byDay[d], openIn = null;
     day.forEach(function (r) {
       if (r.type === 'IN') {
-        if (openIn) { res.soLanQuenRA++; } // IN mới khi chưa RA
+        if (openIn) { res.soLanQuenRA++; }
         openIn = r;
         res.soCa++;
         if (r.tre > 0) res.soLanTre++;
@@ -329,14 +312,25 @@ function getBaoCaoThang(ma, thangStr) { // thangStr 'MM/yyyy'
         openIn = null;
       }
     });
-    if (openIn) res.soLanQuenRA++; // IN không có OUT
+    if (openIn) res.soLanQuenRA++;
   }
   res.tongGio = Math.round(res.tongGio * 100) / 100;
   res.kpi = res.soLanTre >= 4 ? 0 : (res.soCa ? Math.round((res.soCa - res.soLanTre) / res.soCa * 100) : 100);
   return res;
 }
 
-// Giờ 1 ca = min(OUT thực, giờ KT ca) − giờ BD ca
+// Báo cáo cả tháng TẤT CẢ nhân viên
+function getBaoCaoThangTatCa(thangStr) {
+  var list = getNhanVienList();
+  var out = [];
+  list.forEach(function (n) {
+    var r = getBaoCaoThang(n.ma, thangStr);
+    out.push(r);
+  });
+  out.sort(function (a, b) { return a.ma < b.ma ? -1 : 1; });
+  return out;
+}
+
 function gioLam(inR, outR, ngayStr) {
   if (!inR.bd || !inR.kt) return 0;
   var bdTs = parseVN(ngayStr + ' ' + inR.bd);
@@ -366,7 +360,6 @@ function weekDay(dt) {
   return map[dt.getDay()];
 }
 
-// Giờ chuẩn: GV lùi 15', VP T7/CN lùi 30', VP ngày thường chuẩn 08:00
 function chuanTime(caBd, role, thu, openTs) {
   var d = new Date(openTs);
   var parts = caBd.split(':');
@@ -379,7 +372,7 @@ function chuanTime(caBd, role, thu, openTs) {
   return d.getTime() - lui * 60000;
 }
 
-function parseVN(s) { // 'dd/MM/yyyy HH:mm' hoặc có :ss
+function parseVN(s) {
   var m = s.match(/(\d\d)\/(\d\d)\/(\d{4}) (\d\d):(\d\d)/);
   if (!m) return 0;
   return new Date(m[3], m[2] - 1, m[1], m[4], m[5]).getTime();
