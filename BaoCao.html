@@ -59,6 +59,9 @@
       <button class="go" onclick="xemThang()">Xem tất cả</button>
     </div>
     <div id="kqThang"></div>
+    <div id="btnXuat" style="display:none; margin-top:12px; text-align:center;">
+      <button class="go" onclick="xuatSheet()" style="background:#1a7a33;">📥 Xuất về Sheet BAOCAO_THANG</button>
+    </div>
   </div>
 </div>
 
@@ -171,7 +174,23 @@ function xemThang() {
     });
     h += '</table>';
     kq.innerHTML = h;
+    document.getElementById('btnXuat').style.display = '';
   }).withFailureHandler(loi).getBaoCaoThangTatCa(th);
+}
+function xuatSheet() {
+  var th = document.getElementById('thang').value.trim() || thangNay();
+  var btn = document.getElementById('btnXuat');
+  btn.innerHTML = '<button class="go" disabled style="background:#888;">⏳ Đang xuất...</button>';
+  google.script.run.withSuccessHandler(function (r) {
+    if (r.ok) {
+      btn.innerHTML = '<button class="go" style="background:#1a7a33;">✅ ' + r.msg + '</button>';
+    } else {
+      btn.innerHTML = '<button class="go" onclick="xuatSheet()" style="background:#c00;">❌ Lỗi, bấm thử lại</button>';
+    }
+  }).withFailureHandler(function (e) {
+    btn.innerHTML = '<button class="go" onclick="xuatSheet()" style="background:#c00;">❌ Lỗi: ' + 
+      (e && e.message || 'không rõ') + '</button>';
+  }).xuatBaoCaoSheet(th);
 }
 </script>
 </body>

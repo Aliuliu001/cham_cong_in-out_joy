@@ -29,9 +29,10 @@ function doGet(e) {
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureTab(ss, 'CHECK IN',
-    ['Mã NV', 'Họ tên', 'Ca', 'Loại IN/OUT', 'Giờ check in', 'Giờ check out', 'Trễ (phút)', 'Ghi chú', 'Link ảnh', 'Khoảng cách (m)']);
-  ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ tên', 'Vai trò (Giáo viên/Văn phòng)']);
-  ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
+    ['Mã NV', 'Họ và tên', 'Ngày', 'Ca', 'Loại IN/OUT', 'Giờ check in', 'Giờ check out', 'Trễ (phút)', 'Ghi chú', 'Link ảnh', 'Khoảng cách (m)']);
+  ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ và tên', 'Vai trò (Giáo viên/Văn phòng)']);
+  ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ và tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
+  ensureTab(ss, 'BAOCAO_THANG', ['Mã NV', 'Họ và tên', 'Tổng giờ', 'Số ca', 'Số lần trễ', 'Số lần quên OUT', 'KPI (%)']);
 }
 
 function ensureTab(ss, name, headers) {
@@ -181,7 +182,9 @@ function submitCheckin(p) {
   // Xử lý auto OUT
   if (p.autoOutDone && p.autoOutData) {
     var a = p.autoOutData;
-    sh.appendRow([p.ma, a.ten, a.ca, 'OUT', '', a.outTime, 0, '⚠️ Quên check out (Hệ thống tự OUT)', '', '']);
+    var ngayStr = fmtD(new Date(p.openTs));
+    // Thứ tự cột mới: Mã, Tên, Ngày, Ca, Loại, Giờ in, Giờ out, Trễ, Ghi chú, Ảnh, Khoảng cách
+    sh.appendRow([p.ma, a.ten, ngayStr, a.ca, 'OUT', '', a.outTime, 0, '⚠️ Quên check out (Hệ thống tự OUT)', '', '']);
   }
   
   if (p.autoOutDone) note = 'VÀO ca mới sau khi hệ thống tự OUT ca trước';
@@ -200,11 +203,12 @@ function submitCheckin(p) {
   var blob = Utilities.newBlob(Utilities.base64Decode(p.photo), 'image/jpeg', fname);
   var file = folder.createFile(blob);
 
-  // Thứ tự mới: Mã, Tên, Ca, Loại IN/OUT, Giờ check in, Giờ check out, Trễ, Ghi chú, Link ảnh, Khoảng cách
-  var checkInTime = p.type === 'IN' ? p.openText : '';
-  var checkOutTime = p.type === 'OUT' ? p.openText : '';
+  // Thứ tự cột mới: Mã, Tên, Ngày, Ca, Loại IN/OUT, Giờ check in, Giờ check out, Trễ, Ghi chú, Link ảnh, Khoảng cách
+  var ngayStr = fmtD(new Date(p.openTs));
+  var checkInTime = p.type === 'IN' ? cellHM(new Date(p.openTs)) : '';
+  var checkOutTime = p.type === 'OUT' ? cellHM(new Date(p.openTs)) : '';
   
-  sh.appendRow([p.ma, p.ten, p.caLabel || '', p.type, checkInTime, checkOutTime, lateMin, note, file.getUrl(), distM]);
+  sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel || '', p.type, checkInTime, checkOutTime, lateMin, note, file.getUrl(), distM]);
 
   return { ok: true, time: p.openText, distance: distM, lateMin: lateMin, type: p.type };
 }
@@ -223,19 +227,17 @@ function getBaoCaoNgay(ngayStr) {
   if (!sh || sh.getLastRow() < 2) return [];
   var v = sh.getDataRange().getValues();
   var map = {};
-  // Thứ tự cột mới: 0:Mã, 1:Tên, 2:Ca, 3:Loại, 4:Check in, 5:Check out, 6:Trễ, 7:Ghi chú, 8:Link ảnh, 9:Khoảng cách
+  // Thứ tự cột mới: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại, 5:Giờ in, 6:Giờ out, 7:Trễ, 8:Ghi chú, 9:Link ảnh, 10:Khoảng cách
   for (var i = 1; i < v.length; i++) {
     if (!v[i][0]) continue;
-    var dayIn = cellDay(v[i][4]);
-    var dayOut = cellDay(v[i][5]);
-    var day = dayIn || dayOut;
+    var day = cellDay(v[i][2]);
     if (day !== ngayStr) continue;
     var ma = String(v[i][0]).trim();
     if (!map[ma]) map[ma] = { ma: ma, ten: String(v[i][1]), logs: [] };
-    var gio = cellHM(v[i][4] || v[i][5]);
-    map[ma].logs.push({ gio: gio, type: String(v[i][3]),
-      ca: String(v[i][2]), tre: Number(v[i][6] || 0), kc: Number(v[i][9] || 0),
-      anh: String(v[i][8] || ''), note: String(v[i][7] || '') });
+    var gio = v[i][5] || v[i][6]; // Giờ in hoặc Giờ out
+    map[ma].logs.push({ gio: String(gio), type: String(v[i][4]),
+      ca: String(v[i][3]), tre: Number(v[i][7] || 0), kc: Number(v[i][10] || 0),
+      anh: String(v[i][9] || ''), note: String(v[i][8] || '') });
   }
   var out = [];
   for (var k in map) {
@@ -289,9 +291,10 @@ function getChuaCham(ngayStr) {
   var daCham = {};
   if (shC && shC.getLastRow() >= 2) {
     var cv = shC.getDataRange().getValues();
+    // Cột mới: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại
     for (var j = 1; j < cv.length; j++) {
-      var dayIn = cellDay(cv[j][4]); // Cột mới: Giờ check in
-      if (dayIn === ngayStr && String(cv[j][3]) === 'IN') daCham[String(cv[j][0]).trim()] = 1; // Cột 3: Loại
+      var day = cellDay(cv[j][2]);
+      if (day === ngayStr && String(cv[j][4]) === 'IN') daCham[String(cv[j][0]).trim()] = 1;
     }
   }
   var out = [];
@@ -306,19 +309,16 @@ function getBaoCaoThang(ma, thangStr) {
   if (!sh || sh.getLastRow() < 2) return res;
   var v = sh.getDataRange().getValues();
   var rows = [];
-  // Cột mới: 0:Mã, 1:Tên, 2:Ca, 3:Loại, 4:Check in, 5:Check out, 6:Trễ, 7:Ghi chú
+  // Cột mới: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại, 5:Giờ in, 6:Giờ out, 7:Trễ, 8:Ghi chú
   for (var i = 1; i < v.length; i++) {
     if (!v[i][0]) continue;
     if (String(v[i][0]).trim() !== ma) continue;
-    var dayIn = cellDay(v[i][4]);
-    var dayOut = cellDay(v[i][5]);
-    var monthIn = cellMY(v[i][4]);
-    var monthOut = cellMY(v[i][5]);
-    var month = monthIn || monthOut;
+    var day = cellDay(v[i][2]);
+    var month = cellMY(v[i][2]);
     if (month !== thangStr) continue;
-    var day = dayIn || dayOut;
-    rows.push({ ngay: day, gio: cellHM(v[i][4] || v[i][5]), type: String(v[i][3]), ca: String(v[i][2]),
-      bd: caBdFromLabel(String(v[i][2])), kt: caKtFromLabel(String(v[i][2])), tre: Number(v[i][6] || 0) });
+    var gio = v[i][5] || v[i][6];
+    rows.push({ ngay: day, gio: String(gio), type: String(v[i][4]), ca: String(v[i][3]),
+      bd: caBdFromLabel(String(v[i][3])), kt: caKtFromLabel(String(v[i][3])), tre: Number(v[i][7] || 0) });
   }
   var byDay = {};
   rows.forEach(function (r) {
@@ -409,3 +409,125 @@ function parseVN(s) {
 
 function caBdFromLabel(label) { var m = label.match(/(\d\d:\d\d)\s*[-–]/); return m ? m[1] : ''; }
 function caKtFromLabel(label) { var m = label.match(/[-–]\s*(\d\d:\d\d)/); return m ? m[1] : ''; }
+
+/* ---------- Xuất báo cáo ra Sheet & Backup tự động ---------- */
+
+function xuatBaoCaoSheet(thangStr) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var list = getNhanVienList();
+  
+  // 1. Tạo sheet BAOCAO_THANG - MM/YYYY
+  var sheetName = 'BAOCAO_THANG - ' + thangStr;
+  var sh = ss.getSheetByName(sheetName);
+  if (!sh) { sh = ss.insertSheet(sheetName); }
+  else { sh.clear(); }
+  
+  sh.appendRow(['BẢNG TỔNG HỢP CHẤM CÔNG THÁNG ' + thangStr]);
+  sh.appendRow(['Mã NV', 'Họ và tên', 'Tổng giờ', 'Số ca', 'Số lần trễ', 'Số lần quên OUT', 'KPI (%)']);
+  
+  var summaryRows = [];
+  list.forEach(function (n) {
+    var r = getBaoCaoThang(n.ma, thangStr);
+    summaryRows.push([r.ma, n.ten, r.tongGio, r.soCa, r.soLanTre, r.soLanQuenRA, r.kpi]);
+  });
+  if (summaryRows.length > 0) {
+    sh.getRange(3, 1, summaryRows.length, summaryRows[0].length).setValues(summaryRows);
+  }
+  sh.setFrozenRows(2);
+  
+  // 2. Tạo sheet Quên check / Lỗi tháng
+  var errSheetName = 'Lỗi tháng ' + thangStr;
+  var shErr = ss.getSheetByName(errSheetName);
+  if (!shErr) { shErr = ss.insertSheet(errSheetName); }
+  else { shErr.clear(); }
+  
+  shErr.appendRow(['DANH SÁCH LỖI / QUÊN CHECK - THÁNG ' + thangStr]);
+  shErr.appendRow(['Ngày', 'Mã NV', 'Họ và tên', 'Ca', 'Loại lỗi', 'Phút trễ', 'Ghi chú']);
+  
+  // Lấy dữ liệu CHECK IN trong tháng
+  var shCheck = ss.getSheetByName('CHECK IN');
+  var errRows = [];
+  if (shCheck && shCheck.getLastRow() >= 2) {
+    var v = shCheck.getDataRange().getValues();
+    for (var i = 1; i < v.length; i++) {
+      if (!v[i][0]) continue;
+      var ngay = cellDay(v[i][2]);
+      var month = cellMY(v[i][2]);
+      if (month !== thangStr) continue;
+      
+      var ma = String(v[i][0]);
+      var ten = String(v[i][1]);
+      var ca = String(v[i][3]);
+      var loai = String(v[i][4]);
+      var tre = Number(v[i][6] || 0);
+      var note = String(v[i][8]);
+      
+      // Kiểm tra lỗi:
+      // 1. Trễ IN (>0 phút)
+      if (loai === 'IN' && tre > 0) {
+        errRows.push([ngay, ma, ten, ca, 'Trễ IN', tre + 'p', note]);
+      }
+      // 2. Quên OUT / Hệ thống tự OUT
+      if (note.indexOf('Quên check out') !== -1 || note.indexOf('tự OUT') !== -1) {
+        errRows.push([ngay, ma, ten, ca, 'Quên OUT', '', note]);
+      }
+    }
+  }
+  if (errRows.length > 0) {
+    shErr.getRange(3, 1, errRows.length, errRows[0].length).setValues(errRows);
+  }
+  shErr.setFrozenRows(2);
+  
+  return { ok: true, msg: 'Đã xuất thành công 2 sheet: ' + sheetName + ' và ' + errSheetName };
+}
+
+// Hàm chạy tự động ngày 1 hàng tháng
+function autoBackupThangTruoc() {
+  var d = new Date();
+  // Nếu là ngày 1, backup tháng trước
+  if (d.getDate() === 1) {
+    var prev = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    var thangStr = Utilities.formatDate(prev, TZ, 'MM/yyyy');
+    var thangFile = Utilities.formatDate(prev, TZ, 'MM-yyyy');
+    
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // 1. Duplicate sheet CHECK IN
+    var shCheck = ss.getSheetByName('CHECK IN');
+    if (shCheck) {
+      var newCheckName = 'CHECK IN - Tháng ' + thangFile;
+      var existing = ss.getSheetByName(newCheckName);
+      if (!existing) {
+        var copy = shCheck.copyTo(ss);
+        copy.setName(newCheckName);
+      }
+    }
+    
+    // 2. Xuất báo cáo tháng trước
+    xuatBaoCaoSheet(thangStr);
+    
+    // 3. Xóa dữ liệu cũ trong sheet CHECK IN (giữ lại header)
+    if (shCheck && shCheck.getLastRow() > 1) {
+      shCheck.getRange(2, 1, shCheck.getLastRow() - 1, shCheck.getLastColumn()).clearContent();
+    }
+  }
+}
+
+// Đăng ký trigger chạy lúc 00:30 hàng ngày
+function setupTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var exists = false;
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'autoBackupThangTruoc') {
+      exists = true;
+      break;
+    }
+  }
+  if (!exists) {
+    ScriptApp.newTrigger('autoBackupThangTruoc')
+      .timeBased()
+      .everyDays(1)
+      .atHour(0)
+      .create();
+  }
+}
