@@ -33,3 +33,4 @@ Nền tảng: Google Apps Script + Google Sheets + Google Drive.
 ## Bản này chưa có
 
 Nhận diện mặt tự động (ảnh chỉ để coi lại), chấm bù ngày cũ.
+update
