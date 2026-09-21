@@ -155,23 +155,41 @@ function submitCheckin(p) {
   var sh = ss.getSheetByName('CHECK IN');
   var todayStr = fmtD(new Date(p.openTs || new Date().getTime()));
 
-  // Tự động OUT ca cũ nếu quên OUT
+  // CHẶN SPAM: Kiểm tra xem hôm nay nhân viên đã check IN ca này chưa
+  if (p.type === 'IN' && !p.autoOutDone && !p.confirmed) {
+    var rows = sh.getDataRange().getValues();
+    for (var i = rows.length - 1; i >= 1; i--) {
+      if (!rows[i][0]) continue;
+      var rowDay = cellDay(rows[i][2]); // Ngày
+      if (String(rows[i][0]).trim() === p.ma && rowDay === todayStr) {
+        // Kiểm tra xem đã có IN cùng ca này chưa
+        var existingCa = String(rows[i][3]); // Ca
+        var existingType = String(rows[i][4]); // Loại (IN/OUT)
+        if (existingType === 'IN' && existingCa === p.caLabel) {
+          return { ok: false, msg: '❌ Bạn đã check-in ca [' + p.caLabel + '] ngày hôm nay rồi, không thể check-in lại!' };
+        }
+      }
+      if (String(rows[i][0]).trim() === p.ma && rowDay !== todayStr) break;
+    }
+  }
+
+  // Tự động OUT ca cũ nếu quên OUT (khi vào ca KHÁC)
   var note = '';
   var autoOutRow = null;
   if (p.type === 'IN' && !p.autoOutDone) {
     var rows = sh.getDataRange().getValues();
     for (var i = rows.length - 1; i >= 1; i--) {
       if (!rows[i][0]) continue;
-      var rowDay = cellDay(rows[i][4]); // Cột mới: Giờ check in
+      var rowDay = cellDay(rows[i][2]); // Ngày
       if (String(rows[i][0]).trim() === p.ma && rowDay === todayStr) {
-        if (rows[i][3] === 'IN') { // Cột mới: Loại IN/OUT
-          // Tìm ca cũ chưa OUT
-          var caCu = String(rows[i][2]); // Cột mới: Ca
-          var caBdCu = caBdFromLabel(caCu);
-          var caKtCu = caKtFromLabel(caCu);
-          if (!caKtCu) caKtCu = '17:00'; // Mặc định nếu không parse được
-          return { ok: false, needAutoOut: true, caCu: caCu, caKtCu: caKtCu,
-            msg: 'Ca ' + caCu + ' chưa OUT. Hệ thống sẽ tự động OUT lúc ' + caKtCu };
+        if (rows[i][4] === 'IN') { // Loại IN
+          var caCu = String(rows[i][3]); // Ca cũ
+          if (caCu !== p.caLabel) { // Nếu khác ca mới thì mới hỏi auto out
+            var caKtCu = caKtFromLabel(caCu);
+            if (!caKtCu) caKtCu = '17:00';
+            return { ok: false, needAutoOut: true, caCu: caCu, caKtCu: caKtCu,
+              msg: 'Ca trước (' + caCu + ') chưa OUT. Hệ thống sẽ tự động OUT lúc ' + caKtCu };
+          }
         }
         break;
       }
