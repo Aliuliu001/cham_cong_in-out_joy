@@ -332,15 +332,24 @@ function getBaoCaoThang(ma, thangStr) {
     if (!byDay[d]) byDay[d] = [];
     byDay[d].push(r);
   });
+  
+  // Theo dõi các ca đã tính trễ trong ngày để tránh tính trùng khi nhân viên check-in nhiều lần cùng 1 ca
   for (var d in byDay) {
     var day = byDay[d], openIn = null;
+    var caDaTinhTre = {}; // Lưu danh sách ca đã tính trễ trong ngày này
+    
     day.forEach(function (r) {
       if (r.type === 'IN') {
         if (openIn) { res.soLanQuenRA++; }
         openIn = r;
         res.soCa++;
-        // Chỉ tính trễ nếu là IN và có số phút trễ > 0
-        if (r.tre > 0) res.soLanTre++;
+        
+        // CHỈ TÍNH TRỄ 1 LẦN DUY NHẤT CHO MỖI CA TRONG 1 NGÀY (lấy lần IN đầu tiên của ca đó)
+        var caName = r.ca || 'Ca chung';
+        if (r.tre > 0 && !caDaTinhTre[caName]) {
+          res.soLanTre++;
+          caDaTinhTre[caName] = true;
+        }
       } else if (r.type === 'OUT' && openIn) {
         var h = gioLam(openIn, r, d);
         res.tongGio += h;
@@ -351,7 +360,8 @@ function getBaoCaoThang(ma, thangStr) {
     if (openIn) res.soLanQuenRA++;
   }
   res.tongGio = Math.round(res.tongGio * 100) / 100;
-  // KPI mới tính trên số lần CHECK IN trễ: 0 lần=100%, 1 lần=80%, 2-3 lần=60%, 4 lần=40%, ≥5 lần=0%
+  
+  // KPI mới tính trên số lần CHECK IN trễ (mỗi ca tối đa 1 lần trễ/ngày): 0 lần=100%, 1=80%, 2-3=60%, 4=40%, ≥5=0%
   if (res.soLanTre === 0) res.kpi = 100;
   else if (res.soLanTre === 1) res.kpi = 80;
   else if (res.soLanTre <= 3) res.kpi = 60;
