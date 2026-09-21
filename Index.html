@@ -187,6 +187,8 @@ function guiCheckin() {
         '<br>📍 Khoảng cách: ' + r.distance + ' m' +
         (r.type === 'IN' && r.lateMin > 0 ? '<br>⏰ Trễ: ' + r.lateMin + ' phút' : '');
       document.getElementById('btn').style.display = 'none';
+      // Khóa chọn loại và chụp ảnh để chống spam tiếp
+      document.getElementById('photo').disabled = true;
     } else if (r.needAutoOut) {
       clearTimeout(timeoutId);
       btn.disabled = false;
