@@ -234,8 +234,9 @@ function getBaoCaoNgay(ngayStr) {
     if (day !== ngayStr) continue;
     var ma = String(v[i][0]).trim();
     if (!map[ma]) map[ma] = { ma: ma, ten: String(v[i][1]), logs: [] };
-    var gioIn = v[i][5] ? String(v[i][5]) : '';
-    var gioOut = v[i][6] ? String(v[i][6]) : '';
+    // Convert Date object thành string HH:mm:ss
+    var gioIn = v[i][5] ? (v[i][5] instanceof Date ? Utilities.formatDate(v[i][5], TZ, 'HH:mm:ss') : String(v[i][5])) : '';
+    var gioOut = v[i][6] ? (v[i][6] instanceof Date ? Utilities.formatDate(v[i][6], TZ, 'HH:mm:ss') : String(v[i][6])) : '';
     map[ma].logs.push({ gioIn: gioIn, gioOut: gioOut, type: String(v[i][4]),
       ca: String(v[i][3]), tre: Number(v[i][7] || 0), kc: Number(v[i][10] || 0),
       anh: String(v[i][9] || ''), note: String(v[i][8] || '') });
