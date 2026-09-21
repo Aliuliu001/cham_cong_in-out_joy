@@ -30,9 +30,10 @@ function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureTab(ss, 'CHECK IN',
     ['Mã NV', 'Họ và tên', 'Ngày', 'Ca', 'Loại IN/OUT', 'Giờ check in', 'Giờ check out', 'Trễ (phút)', 'Ghi chú', 'Link ảnh', 'Khoảng cách (m)']);
-  ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ và tên', 'Vai trò (Giáo viên/Văn phòng)']);
-  ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ và tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
-  ensureTab(ss, 'BAOCAO_THANG', ['Mã NV', 'Họ và tên', 'Tổng giờ', 'Số ca', 'Số lần trễ', 'Số lần quên OUT', 'KPI (%)']);
+  ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ tên', 'Vai trò (Giáo viên/Văn phòng)']);
+  ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
+  ensureTab(ss, 'BAO_VANG', ['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Lý do', 'Thời gian báo']);
+  ensureTab(ss, 'BAOCAO_THANG', ['Mã NV', 'Họ tên', 'Tổng giờ', 'Giờ tăng cường', 'Số ca', 'Số lần trễ', 'Số lần quên IN', 'Số lần quên OUT', 'KPI (%)']);
 }
 
 function ensureTab(ss, name, headers) {
@@ -291,6 +292,7 @@ function getChuaCham(ngayStr) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var shL = ss.getSheetByName('LICHLAM');
   var shC = ss.getSheetByName('CHECK IN');
+  var shV = ss.getSheetByName('BAO_VANG');
   if (!shL || shL.getLastRow() < 2) return [];
   var thu = weekDay(parseVNDate(ngayStr));
   var lv = shL.getDataRange().getDisplayValues();
@@ -310,7 +312,7 @@ function getChuaCham(ngayStr) {
     }
     if (!matchDay(ngayCell, thu)) continue;
     if (!lich[ma]) lich[ma] = { ma: ma, ten: String(lv[i][1] || ''), cas: [] };
-    lich[ma].cas.push((caCell ? caCell + ' ' : '') + bd);
+    lich[ma].cas.push({ caName: String(caCell).trim(), text: (caCell ? caCell + ' ' : '') + bd });
   }
   var daCham = {};
   if (shC && shC.getLastRow() >= 2) {
@@ -318,11 +320,35 @@ function getChuaCham(ngayStr) {
     // Cột mới: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại
     for (var j = 1; j < cv.length; j++) {
       var day = cellDay(cv[j][2]);
-      if (day === ngayStr && String(cv[j][4]) === 'IN') daCham[String(cv[j][0]).trim()] = 1;
+      if (day === ngayStr && String(cv[j][4]) === 'IN') {
+        daCham[String(cv[j][0]).trim() + '_' + String(cv[j][3]).trim()] = 1;
+      }
+    }
+  }
+  var daVang = {};
+  if (shV && shV.getLastRow() >= 2) {
+    var vv = shV.getDataRange().getValues();
+    for (var k = 1; k < vv.length; k++) {
+      var dayV = cellDay(vv[k][2]);
+      if (dayV === ngayStr) {
+        daVang[String(vv[k][0]).trim() + '_' + String(vv[k][3]).trim()] = 1;
+      }
     }
   }
   var out = [];
-  for (var k in lich) if (!daCham[k]) out.push(lich[k]);
+  for (var k in lich) {
+    var item = lich[k];
+    var activeCas = [];
+    item.cas.forEach(function(c) {
+      var key = item.ma + '_' + c.caName;
+      if (!daCham[key] && !daVang[key]) {
+        activeCas.push(c.text);
+      }
+    });
+    if (activeCas.length > 0) {
+      out.push({ ma: item.ma, ten: item.ten, cas: activeCas });
+    }
+  }
   out.sort(function (a, b) { return a.ma < b.ma ? -1 : 1; });
   return out;
 }
@@ -570,4 +596,25 @@ function setupTrigger() {
       .atHour(0)
       .create();
   }
+}
+
+/* ---------- Báo vắng từ xa & Ra đột xuất ---------- */
+
+function submitBaoVang(p) {
+  if (!p.ma || !p.ten) return { ok: false, msg: 'Vui lòng chọn mã và tên nhân viên.' };
+  if (!p.caLabel) return { ok: false, msg: 'Vui lòng chọn ca cần báo vắng.' };
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName('BAO_VANG');
+  if (!sh) {
+    sh = ss.insertSheet('BAO_VANG');
+    sh.appendRow(['Mã NV', 'Họ và tên', 'Ngày', 'Ca', 'Lý do', 'Thời gian báo']);
+    sh.setFrozenRows(1);
+  }
+  
+  var ngayStr = fmtD(new Date(p.openTs || new Date().getTime()));
+  var thoiGianBao = fmtDT(new Date(p.openTs || new Date().getTime()));
+  
+  sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel, p.lyDo || 'Phụ huynh xin nghỉ', thoiGianBao]);
+  return { ok: true, msg: 'Đã ghi nhận báo vắng ca [' + p.caLabel + '] thành công!' };
 }
