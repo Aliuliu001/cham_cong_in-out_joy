@@ -339,6 +339,7 @@ function getBaoCaoThang(ma, thangStr) {
         if (openIn) { res.soLanQuenRA++; }
         openIn = r;
         res.soCa++;
+        // Chỉ tính trễ nếu là IN và có số phút trễ > 0
         if (r.tre > 0) res.soLanTre++;
       } else if (r.type === 'OUT' && openIn) {
         var h = gioLam(openIn, r, d);
@@ -350,7 +351,7 @@ function getBaoCaoThang(ma, thangStr) {
     if (openIn) res.soLanQuenRA++;
   }
   res.tongGio = Math.round(res.tongGio * 100) / 100;
-  // KPI mới: 0 lần=100%, 1 lần=80%, 2-3 lần=60%, 4 lần=40%, ≥5 lần=0%
+  // KPI mới tính trên số lần CHECK IN trễ: 0 lần=100%, 1 lần=80%, 2-3 lần=60%, 4 lần=40%, ≥5 lần=0%
   if (res.soLanTre === 0) res.kpi = 100;
   else if (res.soLanTre === 1) res.kpi = 80;
   else if (res.soLanTre <= 3) res.kpi = 60;
