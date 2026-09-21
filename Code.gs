@@ -234,29 +234,34 @@ function getBaoCaoNgay(ngayStr) {
     if (day !== ngayStr) continue;
     var ma = String(v[i][0]).trim();
     if (!map[ma]) map[ma] = { ma: ma, ten: String(v[i][1]), logs: [] };
-    var gio = v[i][5] || v[i][6]; // Giờ in hoặc Giờ out
-    map[ma].logs.push({ gio: String(gio), type: String(v[i][4]),
+    var gioIn = v[i][5] ? String(v[i][5]) : '';
+    var gioOut = v[i][6] ? String(v[i][6]) : '';
+    map[ma].logs.push({ gioIn: gioIn, gioOut: gioOut, type: String(v[i][4]),
       ca: String(v[i][3]), tre: Number(v[i][7] || 0), kc: Number(v[i][10] || 0),
       anh: String(v[i][9] || ''), note: String(v[i][8] || '') });
   }
   var out = [];
   for (var k in map) {
     var r = map[k];
-    r.logs.sort(function (a, b) { return a.gio < b.gio ? -1 : 1; });
-    var caps = [], openIn = null;
-    r.logs.forEach(function (l) {
-      if (l.type === 'IN') {
-        if (openIn) caps.push({ vao: openIn.gio, ra: '—', ca: openIn.ca, tre: openIn.tre, thieuRA: true, anh: openIn.anh });
-        openIn = l;
-      } else if (l.type === 'OUT') {
-        if (openIn) { caps.push({ vao: openIn.gio, ra: l.gio, ca: openIn.ca, tre: openIn.tre, thieuRA: false, anh: openIn.anh }); openIn = null; }
-        else caps.push({ vao: '—', ra: l.gio, ca: l.ca, tre: 0, thieuRA: false, anh: l.anh });
-      }
+    r.logs.sort(function (a, b) { 
+      var timeA = a.gioIn || a.gioOut;
+      var timeB = b.gioIn || b.gioOut;
+      return timeA < timeB ? -1 : 1; 
     });
-    if (openIn) caps.push({ vao: openIn.gio, ra: '—', ca: openIn.ca, tre: openIn.tre, thieuRA: true, anh: openIn.anh });
-    r.caps = caps;
-    r.soLanTre = caps.filter(function (c) { return c.tre > 0; }).length;
-    r.quenRA = caps.filter(function (c) { return c.thieuRA; }).length;
+    r.caps = r.logs.map(function(l) {
+      return { 
+        vao: l.gioIn, 
+        ra: l.gioOut, 
+        ca: l.ca, 
+        tre: l.tre, 
+        thieuRA: l.gioIn && !l.gioOut, 
+        anh: l.anh,
+        kc: l.kc,
+        note: l.note
+      };
+    });
+    r.soLanTre = r.caps.filter(function (c) { return c.tre > 0; }).length;
+    r.quenRA = r.caps.filter(function (c) { return c.thieuRA; }).length;
     out.push(r);
   }
   out.sort(function (a, b) { return a.ma < b.ma ? -1 : 1; });

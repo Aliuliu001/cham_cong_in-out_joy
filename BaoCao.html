@@ -136,11 +136,11 @@ function xemNgay() {
               '<td>' + r.ten + '</td>' +
               '<td>' + ngay + '</td>' +
               '<td>' + (c.ca || '—') + '</td>' +
-              '<td>' + (c.vao !== '—' ? 'IN' : 'OUT') + '</td>' +
-              '<td>' + (c.vao !== '—' ? c.vao : '') + '</td>' +
-              '<td>' + (c.ra !== '—' ? c.ra : '') + '</td>' +
+              '<td>' + (c.vao ? 'IN' : 'OUT') + '</td>' +
+              '<td>' + (c.vao || '') + '</td>' +
+              '<td>' + (c.ra || '') + '</td>' +
               '<td>' + (c.tre > 0 ? c.tre : '') + '</td>' +
-              '<td>' + (c.thieuRA ? '⚠️ Nhớ check out' + (c.ca ? ' ca ' + c.ca : '') : '') + '</td>' +
+              '<td>' + (c.note || (c.thieuRA ? '⚠️ Nhớ check out' + (c.ca ? ' ca ' + c.ca : '') : '')) + '</td>' +
               '<td>' + (c.anh ? '<a class="anh" href="' + c.anh + '" target="_blank">Xem</a>' : '') + '</td>' +
               '<td>' + (c.kc || '') + '</td>' +
               '</tr>';
