@@ -131,6 +131,11 @@ function xemNgay() {
         h += '<table><tr><th>Mã</th><th>Họ và tên</th><th>Ngày</th><th>Ca</th><th>Loại</th><th>Giờ IN</th><th>Giờ OUT</th><th>Trễ (phút)</th><th>Ghi chú</th><th>Link ảnh</th><th>Khoảng cách</th></tr>';
         rs.forEach(function (r) {
           r.caps.forEach(function (c, i) {
+            var ghiChu = c.note || '';
+            if (!ghiChu && c.thieuRA) ghiChu = '⚠️ Chưa check out';
+            if (c.tre > 0 && c.tre >= 15) ghiChu = (ghiChu ? ghiChu + ' | ' : '') + '⏰ Trễ ' + c.tre + 'p';
+            if (c.kc && c.kc > 50) ghiChu = (ghiChu ? ghiChu + ' | ' : '') + '📍 GPS: ' + c.kc + 'm';
+            
             h += '<tr>' +
               '<td><b>' + r.ma + '</b></td>' +
               '<td>' + r.ten + '</td>' +
@@ -140,7 +145,7 @@ function xemNgay() {
               '<td>' + (c.vao || '') + '</td>' +
               '<td>' + (c.ra || '') + '</td>' +
               '<td>' + (c.tre > 0 ? c.tre : '') + '</td>' +
-              '<td>' + (c.note || (c.thieuRA ? '⚠️ Nhớ check out' + (c.ca ? ' ca ' + c.ca : '') : '')) + '</td>' +
+              '<td>' + ghiChu + '</td>' +
               '<td>' + (c.anh ? '<a class="anh" href="' + c.anh + '" target="_blank">Xem</a>' : '') + '</td>' +
               '<td>' + (c.kc || '') + '</td>' +
               '</tr>';
