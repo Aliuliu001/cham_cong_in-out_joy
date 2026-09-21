@@ -305,7 +305,7 @@ function getChuaCham(ngayStr) {
 
 function getBaoCaoThang(ma, thangStr) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN');
-  var res = { ma: ma, thang: thangStr, tongGio: 0, soCa: 0, soLanTre: 0, soLanQuenRA: 0, kpi: 100, chiTiet: [] };
+  var res = { ma: ma, ten: '', thang: thangStr, tongGio: 0, gioTangCuong: 0, soCa: 0, soLanTre: 0, soLanQuenIN: 0, soLanQuenRA: 0, kpi: 100, chiTiet: [] };
   if (!sh || sh.getLastRow() < 2) return res;
   var v = sh.getDataRange().getValues();
   var rows = [];
@@ -344,16 +344,21 @@ function getBaoCaoThang(ma, thangStr) {
     if (openIn) res.soLanQuenRA++;
   }
   res.tongGio = Math.round(res.tongGio * 100) / 100;
-  res.kpi = res.soLanTre >= 4 ? 0 : (res.soCa ? Math.round((res.soCa - res.soLanTre) / res.soCa * 100) : 100);
+  // KPI mới: 0 lần=100%, 1 lần=80%, 2-3 lần=60%, 4 lần=40%, ≥5 lần=0%
+  if (res.soLanTre === 0) res.kpi = 100;
+  else if (res.soLanTre === 1) res.kpi = 80;
+  else if (res.soLanTre <= 3) res.kpi = 60;
+  else if (res.soLanTre === 4) res.kpi = 40;
+  else res.kpi = 0;
   return res;
 }
 
-// Báo cáo cả tháng TẤT CẢ nhân viên
 function getBaoCaoThangTatCa(thangStr) {
   var list = getNhanVienList();
   var out = [];
   list.forEach(function (n) {
     var r = getBaoCaoThang(n.ma, thangStr);
+    r.ten = n.ten; // Fix undefined
     out.push(r);
   });
   out.sort(function (a, b) { return a.ma < b.ma ? -1 : 1; });
@@ -423,12 +428,12 @@ function xuatBaoCaoSheet(thangStr) {
   else { sh.clear(); }
   
   sh.appendRow(['BẢNG TỔNG HỢP CHẤM CÔNG THÁNG ' + thangStr]);
-  sh.appendRow(['Mã NV', 'Họ và tên', 'Tổng giờ', 'Số ca', 'Số lần trễ', 'Số lần quên OUT', 'KPI (%)']);
+  sh.appendRow(['Mã NV', 'Họ và tên', 'Tổng giờ', 'Giờ tăng cường', 'Số ca', 'Số lần trễ', 'Số lần quên IN', 'Số lần quên OUT', 'KPI (%)']);
   
   var summaryRows = [];
   list.forEach(function (n) {
     var r = getBaoCaoThang(n.ma, thangStr);
-    summaryRows.push([r.ma, n.ten, r.tongGio, r.soCa, r.soLanTre, r.soLanQuenRA, r.kpi]);
+    summaryRows.push([r.ma, n.ten, r.tongGio, r.gioTangCuong, r.soCa, r.soLanTre, r.soLanQuenIN, r.soLanQuenRA, r.kpi]);
   });
   if (summaryRows.length > 0) {
     sh.getRange(3, 1, summaryRows.length, summaryRows[0].length).setValues(summaryRows);
@@ -459,7 +464,7 @@ function xuatBaoCaoSheet(thangStr) {
       var ten = String(v[i][1]);
       var ca = String(v[i][3]);
       var loai = String(v[i][4]);
-      var tre = Number(v[i][6] || 0);
+      var tre = Number(v[i][7] || 0);
       var note = String(v[i][8]);
       
       // Kiểm tra lỗi:
