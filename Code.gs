@@ -32,7 +32,6 @@ function setup() {
     ['Mã NV', 'Họ và tên', 'Ngày', 'Ca', 'Loại IN/OUT', 'Giờ check in', 'Giờ check out', 'Trễ (phút)', 'Ghi chú', 'Link ảnh', 'Khoảng cách (m)']);
   ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ tên', 'Vai trò (Giáo viên/Văn phòng)']);
   ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
-  ensureTab(ss, 'BAO_VANG', ['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Lý do', 'Thời gian báo']);
   ensureTab(ss, 'BAOCAO_THANG', ['Mã NV', 'Họ tên', 'Tổng giờ', 'Giờ tăng cường', 'Số ca', 'Số lần trễ', 'Số lần quên IN', 'Số lần quên OUT', 'KPI (%)']);
 }
 
@@ -292,7 +291,6 @@ function getChuaCham(ngayStr) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var shL = ss.getSheetByName('LICHLAM');
   var shC = ss.getSheetByName('CHECK IN');
-  var shV = ss.getSheetByName('BAO_VANG');
   if (!shL || shL.getLastRow() < 2) return [];
   var thu = weekDay(parseVNDate(ngayStr));
   var lv = shL.getDataRange().getDisplayValues();
@@ -314,24 +312,16 @@ function getChuaCham(ngayStr) {
     if (!lich[ma]) lich[ma] = { ma: ma, ten: String(lv[i][1] || ''), cas: [] };
     lich[ma].cas.push({ caName: String(caCell).trim(), text: (caCell ? caCell + ' ' : '') + bd });
   }
-  var daCham = {};
+  var daChamHoacVang = {};
   if (shC && shC.getLastRow() >= 2) {
     var cv = shC.getDataRange().getValues();
-    // Cột mới: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại
+    // Cột: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại
     for (var j = 1; j < cv.length; j++) {
       var day = cellDay(cv[j][2]);
-      if (day === ngayStr && String(cv[j][4]) === 'IN') {
-        daCham[String(cv[j][0]).trim() + '_' + String(cv[j][3]).trim()] = 1;
-      }
-    }
-  }
-  var daVang = {};
-  if (shV && shV.getLastRow() >= 2) {
-    var vv = shV.getDataRange().getValues();
-    for (var k = 1; k < vv.length; k++) {
-      var dayV = cellDay(vv[k][2]);
-      if (dayV === ngayStr) {
-        daVang[String(vv[k][0]).trim() + '_' + String(vv[k][3]).trim()] = 1;
+      var loai = String(cv[j][4]);
+      // Loại bỏ cả người đã IN và người đã báo VẮNG
+      if (day === ngayStr && (loai === 'IN' || loai === 'VẮNG')) {
+        daChamHoacVang[String(cv[j][0]).trim() + '_' + String(cv[j][3]).trim()] = 1;
       }
     }
   }
@@ -341,7 +331,7 @@ function getChuaCham(ngayStr) {
     var activeCas = [];
     item.cas.forEach(function(c) {
       var key = item.ma + '_' + c.caName;
-      if (!daCham[key] && !daVang[key]) {
+      if (!daChamHoacVang[key]) {
         activeCas.push(c.text);
       }
     });
@@ -605,16 +595,14 @@ function submitBaoVang(p) {
   if (!p.caLabel) return { ok: false, msg: 'Vui lòng chọn ca cần báo vắng.' };
   
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sh = ss.getSheetByName('BAO_VANG');
-  if (!sh) {
-    sh = ss.insertSheet('BAO_VANG');
-    sh.appendRow(['Mã NV', 'Họ và tên', 'Ngày', 'Ca', 'Lý do', 'Thời gian báo']);
-    sh.setFrozenRows(1);
-  }
+  var sh = ss.getSheetByName('CHECK IN');
+  if (!sh) return { ok: false, msg: 'Sheet CHECK IN không tồn tại. Vui lòng chạy setup() trước.' };
   
   var ngayStr = fmtD(new Date(p.openTs || new Date().getTime()));
-  var thoiGianBao = fmtDT(new Date(p.openTs || new Date().getTime()));
+  var ghiChu = (p.lyDo || 'Phụ huynh xin nghỉ') + ' (Báo vắng từ xa: ' + fmtDT(new Date(p.openTs || new Date().getTime())) + ')';
   
-  sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel, p.lyDo || 'Phụ huynh xin nghỉ', thoiGianBao]);
+  // Thứ tự cột: Mã, Tên, Ngày, Ca, Loại, Giờ in, Giờ out, Trễ, Ghi chú, Ảnh, Khoảng cách
+  sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel, 'VẮNG', '', '', 0, ghiChu, '', '']);
+  
   return { ok: true, msg: 'Đã ghi nhận báo vắng ca [' + p.caLabel + '] thành công!' };
 }
