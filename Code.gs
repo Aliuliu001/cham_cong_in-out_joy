@@ -209,9 +209,7 @@ function submitCheckin(p) {
 
   var lateMin = 0;
   if (p.type === 'IN' && p.caBd) {
-    var role = getRole(p.ma);
-    var thu = weekDay(new Date(p.openTs));
-    var chuan = chuanTime(p.caBd, role, thu, p.openTs);
+    var chuan = chuanTime(p.caBd, p.openTs);
     lateMin = Math.max(0, Math.round((p.openTs - chuan) / 60000));
   }
 
@@ -445,16 +443,13 @@ function weekDay(dt) {
   return map[dt.getDay()];
 }
 
-function chuanTime(caBd, role, thu, openTs) {
+function chuanTime(caBd, openTs) {
+  // Trễ = giờ check-in trừ thẳng giờ bắt đầu ca trong LICHLAM.
+  // Không trừ sớm 15'/30' — user tự set giờ ca thủ công trong LICHLAM.
   var d = new Date(openTs);
-  var parts = caBd.split(':');
+  var parts = String(caBd).split(':');
   d.setHours(Number(parts[0]), Number(parts[1] || 0), 0, 0);
-  var lui = 0;
-  if (role === 'Văn phòng' || role === 'VanPhong') {
-    lui = (thu === 'T7' || thu === 'CN') ? 30 : 0;
-    if (thu !== 'T7' && thu !== 'CN') { d.setHours(8, 0, 0, 0); }
-  } else { lui = 15; }
-  return d.getTime() - lui * 60000;
+  return d.getTime();
 }
 
 function parseVN(s) {
