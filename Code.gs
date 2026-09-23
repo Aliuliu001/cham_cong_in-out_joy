@@ -271,6 +271,7 @@ function getBaoCaoNgay(ngayStr) {
         ra: l.gioOut, 
         ca: l.ca, 
         tre: l.tre, 
+        type: l.type,
         thieuRA: l.gioIn && !l.gioOut, 
         anh: l.anh,
         kc: l.kc,
