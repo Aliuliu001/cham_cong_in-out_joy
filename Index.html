@@ -69,6 +69,7 @@ function chon(t) {
   loai = t;
   document.getElementById('tIn').className = t === 'IN' ? 'on-in' : '';
   document.getElementById('tOut').className = t === 'OUT' ? 'on-out' : '';
+  document.getElementById('btn').textContent = t === 'OUT' ? 'XÁC NHẬN CHECK OUT' : 'XÁC NHẬN CHECK IN';
   checkReady();
 }
 
