@@ -141,7 +141,7 @@ function xemNgay() {
               '<td>' + r.ten + '</td>' +
               '<td>' + ngay + '</td>' +
               '<td>' + (c.ca || '—') + '</td>' +
-              '<td>' + (c.vao ? 'IN' : 'OUT') + '</td>' +
+              '<td>' + (c.type || (c.vao ? 'IN' : 'OUT')) + '</td>' +
               '<td>' + (c.vao || '') + '</td>' +
               '<td>' + (c.ra || '') + '</td>' +
               '<td>' + (c.tre > 0 ? c.tre : '') + '</td>' +
