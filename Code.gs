@@ -313,42 +313,74 @@ function getChuaCham(ngayStr) {
     }
     if (!matchDay(ngayCell, thu)) continue;
     if (!lich[ma]) lich[ma] = { ma: ma, ten: String(lv[i][1] || ''), cas: [] };
-    lich[ma].cas.push({ caName: String(caCell).trim(), text: (caCell ? caCell + ' ' : '') + bd });
+    lich[ma].cas.push({ caName: String(caCell).trim(), text: (caCell ? caCell + ' ' : '') + bd, kt: (nc >= 7 ? fmtTimeCell(lv[i][6]) : fmtTimeCell(lv[i][5])) });
   }
   var daChamHoacVang = {};
+  var caDaChamTheoNgay = {}; // ngay -> danh sách ca đã có IN/VẮNG (dạng full label)
   if (shC && shC.getLastRow() >= 2) {
     var cv = shC.getDataRange().getValues();
     // Cột: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại
     for (var j = 1; j < cv.length; j++) {
       var day = cellDay(cv[j][2]);
       var loai = String(cv[j][4]);
-      // Loại bỏ cả người đã IN và người đã báo VẮNG
+      // Loại bỏ cả người đã IN và người đã báo VẮNG (khớp tên ca hoặc full label bắt đầu bằng tên ca)
       if (day === ngayStr && (loai === 'IN' || loai === 'VẮNG')) {
         daChamHoacVang[String(cv[j][0]).trim() + '_' + String(cv[j][3]).trim()] = 1;
+        var k2 = String(cv[j][0]).trim() + '|' + day;
+        if (!caDaChamTheoNgay[k2]) caDaChamTheoNgay[k2] = [];
+        caDaChamTheoNgay[k2].push(String(cv[j][3]).trim());
       }
     }
+  }
+  function caDaCham(maNv, caTen) {
+    var k2 = maNv + '|' + ngayStr;
+    var arr = caDaChamTheoNgay[k2] || [];
+    for (var q = 0; q < arr.length; q++) {
+      if (arr[q] === caTen || arr[q].indexOf(caTen + ' ') === 0 || arr[q].indexOf(caTen) === 0) return true;
+    }
+    return daChamHoacVang[maNv + '_' + caTen] ? true : false;
   }
   var out = [];
   for (var k in lich) {
     var item = lich[k];
     var activeCas = [];
+    var quaGioCas = [];
     item.cas.forEach(function(c) {
-      var key = item.ma + '_' + c.caName;
-      if (!daChamHoacVang[key]) {
-        activeCas.push(c.text);
+      if (!caDaCham(item.ma, c.caName)) {
+        if (isQuaGioCa(ngayStr, c.kt)) quaGioCas.push(c.text);
+        else activeCas.push(c.text);
       }
     });
-    if (activeCas.length > 0) {
-      out.push({ ma: item.ma, ten: item.ten, cas: activeCas });
+    if (activeCas.length > 0 || quaGioCas.length > 0) {
+      out.push({ ma: item.ma, ten: item.ten, cas: activeCas, casQuaGio: quaGioCas });
     }
   }
   out.sort(function (a, b) { return a.ma < b.ma ? -1 : 1; });
   return out;
 }
 
+// Ca đã hết giờ chưa? Ngày quá khứ -> true. Hôm nay -> so giờ hiện tại với giờ kết thúc ca.
+function isQuaGioCa(ngayStr, kt) {
+  try {
+    var today = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+    if (ngayStr !== today) {
+      var d1 = parseVNDate(ngayStr).getTime();
+      var d0 = parseVNDate(today).getTime();
+      return d1 < d0;
+    }
+    if (!kt) return false;
+    var m = String(kt).match(/(\d\d):(\d\d)/);
+    if (!m) return false;
+    var now = new Date();
+    var end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Number(m[1]), Number(m[2]), 0);
+    return now.getTime() > end.getTime();
+  } catch (e) { return false; }
+}
+
 function getBaoCaoThang(ma, thangStr) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN');
-  var res = { ma: ma, ten: '', thang: thangStr, tongGio: 0, gioTangCuong: 0, soCa: 0, soLanTre: 0, soLanQuenIN: 0, soLanQuenRA: 0, kpi: 100, chiTiet: [] };
+  var res = { ma: ma, ten: '', thang: thangStr, tongGio: 0, gioTangCuong: 0, soCa: 0, soLanTre: 0,
+    soLanQuenIN: 0, soLanQuenRA: 0, soVangCoPhep: 0, soVangKhongBao: 0, vangKhongBaoChiTiet: [], kpi: 100, chiTiet: [] };
   if (!sh || sh.getLastRow() < 2) return res;
   var v = sh.getDataRange().getValues();
   var rows = [];
@@ -361,7 +393,7 @@ function getBaoCaoThang(ma, thangStr) {
     if (month !== thangStr) continue;
     var gio = v[i][5] || v[i][6];
     rows.push({ ngay: day, gio: String(gio), type: String(v[i][4]), ca: String(v[i][3]),
-      bd: caBdFromLabel(String(v[i][3])), kt: caKtFromLabel(String(v[i][3])), tre: Number(v[i][7] || 0) });
+      bd: caBdFromLabel(String(v[i][3])), kt: caKtFromLabel(String(v[i][3])), tre: Number(v[i][7] || 0), note: String(v[i][8] || '') });
   }
   var byDay = {};
   rows.forEach(function (r) {
@@ -387,6 +419,14 @@ function getBaoCaoThang(ma, thangStr) {
           res.soLanTre++;
           caDaTinhTre[caName] = true;
         }
+      } else if (r.type === 'VẮNG') {
+        // Vắng có phép: 0 giờ, không tính ca làm, nhưng VẮNG bấm muộn vẫn tính trễ như đi trễ.
+        res.soVangCoPhep++;
+        var caV = r.ca || 'Ca chung';
+        if (r.tre > 0 && !caDaTinhTre[caV]) {
+          res.soLanTre++;
+          caDaTinhTre[caV] = true;
+        }
       } else if (r.type === 'OUT' && openIn) {
         var h = gioLam(openIn, r, d);
         res.tongGio += h;
@@ -396,6 +436,10 @@ function getBaoCaoThang(ma, thangStr) {
     });
     if (openIn) res.soLanQuenRA++;
   }
+  // VẮNG KHÔNG BÁO: so lịch (LICHLAM) với thực tế — ca nào trong lịch mà
+  // không có dòng IN/VẮNG trong CHECK IN thì tính như 1 lần trễ để trừ KPI,
+  // chỉ hiện trong báo cáo tháng + Lỗi tháng, KHÔNG ghi thêm dòng vào Sheet.
+  tinhVangKhongBao(ma, thangStr, res);
   res.tongGio = Math.round(res.tongGio * 100) / 100;
   
   // KPI mới tính trên số lần CHECK IN trễ (mỗi ca tối đa 1 lần trễ/ngày): 0 lần=100%, 1=80%, 2-3=60%, 4=40%, ≥5=0%
@@ -405,6 +449,81 @@ function getBaoCaoThang(ma, thangStr) {
   else if (res.soLanTre === 4) res.kpi = 40;
   else res.kpi = 0;
   return res;
+}
+
+// So LICHLAM với CHECK IN: ca nào có lịch mà không có IN/VẮNG => vắng không báo.
+// Tính như 1 lần trễ để trừ KPI. Chỉ hiện trên báo cáo + Lỗi tháng, không ghi thêm dòng.
+function tinhVangKhongBao(ma, thangStr, res) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var shL = ss.getSheetByName('LICHLAM');
+  var shC = ss.getSheetByName('CHECK IN');
+  if (!shL || shL.getLastRow() < 2 || !shC || shC.getLastRow() < 2) return;
+  var p = String(thangStr).split('/');
+  if (p.length !== 2) return;
+  var mm = Number(p[0]), yyyy = Number(p[1]);
+  var daysInMonth = new Date(yyyy, mm, 0).getDate();
+  // Gom lịch theo thứ trong tuần: ma|thu -> [{ca, bd, kt}]
+  var lv = shL.getDataRange().getDisplayValues();
+  var nc = lv[0].length;
+  var lichTuan = {};
+  for (var i = 1; i < lv.length; i++) {
+    if (String(lv[i][0]).trim() !== ma) continue;
+    var thuCell, ngayCell, caCell, bd, kt;
+    if (nc >= 7) {
+      thuCell = String(lv[i][2]).trim(); ngayCell = String(lv[i][3]).trim();
+      caCell = String(lv[i][4] || ''); bd = fmtTimeCell(lv[i][5]); kt = fmtTimeCell(lv[i][6]);
+    } else {
+      thuCell = ''; ngayCell = String(lv[i][2]).trim();
+      caCell = String(lv[i][3] || ''); bd = fmtTimeCell(lv[i][4]); kt = fmtTimeCell(lv[i][5]);
+    }
+    var thus = [];
+    if (thuCell) { thus = [thuCell]; }
+    else { thus = ['T2','T3','T4','T5','T6','T7','CN']; }
+    thus.forEach(function (t) {
+      var key = t;
+      if (!lichTuan[key]) lichTuan[key] = [];
+      lichTuan[key].push({ ca: String(caCell).trim(), ngayCell: ngayCell, bd: bd, kt: kt });
+    });
+    if (thuCell) continue;
+  }
+  // Gom các dòng IN/VẮNG đã có: ngay -> [ca...]
+  var cv = shC.getDataRange().getValues();
+  var daCo = {};
+  for (var j = 1; j < cv.length; j++) {
+    if (!cv[j][0] || String(cv[j][0]).trim() !== ma) continue;
+    if (cellMY(cv[j][2]) !== thangStr) continue;
+    var loai = String(cv[j][4]);
+    if (loai !== 'IN' && loai !== 'VẮNG') continue;
+    var k = cellDay(cv[j][2]);
+    if (!daCo[k]) daCo[k] = [];
+    daCo[k].push(String(cv[j][3]).trim());
+  }
+  var homNay = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy');
+  var homNayTs = parseVNDate(homNay).getTime();
+  for (var dd = 1; dd <= daysInMonth; dd++) {
+    var dt = new Date(yyyy, mm - 1, dd);
+    // Bỏ ngày tương lai
+    if (dt.getTime() > homNayTs) break;
+    var thu = weekDay(dt);
+    var arr = lichTuan[thu] || [];
+    if (!arr.length) continue;
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    var ngayStr = pad(dd) + '/' + pad(mm) + '/' + yyyy;
+    arr.forEach(function (c) {
+      if (!matchDay(c.ngayCell, thu)) return;
+      var co = daCo[ngayStr] || [];
+      var found = false;
+      for (var q = 0; q < co.length; q++) {
+        if (co[q] === c.ca || co[q].indexOf(c.ca + ' ') === 0 || co[q].indexOf(c.ca) === 0) { found = true; break; }
+      }
+      if (!found) {
+        res.soVangKhongBao++;
+        res.soLanTre++; // tính như 1 lần trễ
+        res.soLanQuenIN++;
+        res.vangKhongBaoChiTiet.push({ ngay: ngayStr, ca: c.ca });
+      }
+    });
+  }
 }
 
 function getBaoCaoThangTatCa(thangStr) {
@@ -479,12 +598,12 @@ function xuatBaoCaoSheet(thangStr) {
   else { sh.clear(); }
   
   sh.appendRow(['BẢNG TỔNG HỢP CHẤM CÔNG THÁNG ' + thangStr]);
-  sh.appendRow(['Mã NV', 'Họ và tên', 'Tổng giờ', 'Giờ tăng cường', 'Số ca', 'Số lần trễ', 'Số lần quên IN', 'Số lần quên OUT', 'KPI (%)']);
+  sh.appendRow(['Mã NV', 'Họ và tên', 'Tổng giờ', 'Giờ tăng cường', 'Số ca', 'Số lần trễ', 'Số lần quên IN', 'Số lần quên OUT', 'Vắng có phép', 'Vắng không báo', 'KPI (%)']);
   
   var summaryRows = [];
   list.forEach(function (n) {
     var r = getBaoCaoThang(n.ma, thangStr);
-    summaryRows.push([r.ma, n.ten, r.tongGio, r.gioTangCuong, r.soCa, r.soLanTre, r.soLanQuenIN, r.soLanQuenRA, r.kpi]);
+    summaryRows.push([r.ma, n.ten, r.tongGio, r.gioTangCuong, r.soCa, r.soLanTre, r.soLanQuenIN, r.soLanQuenRA, r.soVangCoPhep, r.soVangKhongBao, r.kpi]);
   });
   if (summaryRows.length > 0) {
     sh.getRange(3, 1, summaryRows.length, summaryRows[0].length).setValues(summaryRows);
@@ -523,12 +642,29 @@ function xuatBaoCaoSheet(thangStr) {
       if (loai === 'IN' && tre > 0) {
         errRows.push([ngay, ma, ten, ca, 'Trễ IN', tre + 'p', note]);
       }
+      // 1b. VẮNG bấm muộn (>0 phút) — trừ KPI như đi trễ
+      if (loai === 'VẮNG' && tre > 0) {
+        errRows.push([ngay, ma, ten, ca, 'Vắng báo trễ', tre + 'p', note]);
+      }
+      // 1c. VẮNG đúng giờ — chỉ ghi nhận, không trừ KPI
+      if (loai === 'VẮNG' && !(tre > 0)) {
+        errRows.push([ngay, ma, ten, ca, 'Vắng có phép', '', note]);
+      }
       // 2. Quên OUT / Hệ thống tự OUT
       if (note.indexOf('Quên check out') !== -1 || note.indexOf('tự OUT') !== -1) {
         errRows.push([ngay, ma, ten, ca, 'Quên OUT', '', note]);
       }
     }
   }
+  // 3. VẮNG KHÔNG BÁO: ca có lịch mà không có IN/VẮNG — tính như 1 lần trễ
+  var baoThang = {};
+  list.forEach(function (n) { baoThang[n.ma] = getBaoCaoThang(n.ma, thangStr); });
+  list.forEach(function (n) {
+    var r = baoThang[n.ma];
+    (r.vangKhongBaoChiTiet || []).forEach(function (x) {
+      errRows.push([x.ngay, n.ma, n.ten, x.ca, 'Vắng không báo', '', 'Không check-in, không báo vắng — tính như trễ để trừ KPI']);
+    });
+  });
   if (errRows.length > 0) {
     shErr.getRange(3, 1, errRows.length, errRows[0].length).setValues(errRows);
   }

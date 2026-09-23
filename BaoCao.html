@@ -154,8 +154,17 @@ function xemNgay() {
         h += '</table>';
       }
       if (vang.length) {
-        h += '<div class="miss"><b>⚠️ Chưa chấm (' + vang.length + '):</b><br>' +
-          vang.map(function (v) { return v.ma + ' ' + v.ten + ' (' + v.cas.join(', ') + ')'; }).join('<br>') + '</div>';
+        var chuaChamHien = [], quaGioHien = [];
+        vang.forEach(function (v) {
+          if (v.cas && v.cas.length) chuaChamHien.push(v.ma + ' ' + v.ten + ' (' + v.cas.join(', ') + ')');
+          if (v.casQuaGio && v.casQuaGio.length) quaGioHien.push(v.ma + ' ' + v.ten + ' (' + v.casQuaGio.join(', ') + ')');
+        });
+        if (chuaChamHien.length) {
+          h += '<div class="miss"><b>⚠️ Chưa chấm (' + chuaChamHien.length + '):</b><br>' + chuaChamHien.join('<br>') + '</div>';
+        }
+        if (quaGioHien.length) {
+          h += '<div class="miss"><b>🔴 Vắng không báo — ca đã hết giờ (' + quaGioHien.length + '):</b><br>' + quaGioHien.join('<br>') + '</div>';
+        }
       }
       kq.innerHTML = h;
     }).withFailureHandler(loi).getChuaCham(ngay);
@@ -172,7 +181,7 @@ function xemThang() {
   google.script.run.withSuccessHandler(function (list) {
     if (!list.length) { kq.innerHTML = '<p>Chưa có dữ liệu tháng này.</p>'; return; }
     var h = '<p><b>Bảng tổng hợp tất cả nhân viên — Tháng ' + th + '</b></p>';
-    h += '<table><tr><th>Mã</th><th>Họ tên</th><th>Tổng giờ</th><th>Giờ tăng cường</th><th>Số ca</th><th>Lần trễ</th><th>Chưa IN</th><th>Chưa OUT</th><th>KPI</th></tr>';
+    h += '<table><tr><th>Mã</th><th>Họ tên</th><th>Tổng giờ</th><th>Giờ tăng cường</th><th>Số ca</th><th>Lần trễ</th><th>Chưa IN</th><th>Chưa OUT</th><th>Vắng có phép</th><th>Vắng không báo</th><th>KPI</th></tr>';
     list.forEach(function (r) {
       h += '<tr>' +
         '<td><b>' + r.ma + '</b></td>' +
@@ -183,8 +192,14 @@ function xemThang() {
         '<td class="' + (r.soLanTre ? 'tre' : '') + '">' + r.soLanTre + '</td>' +
         '<td class="' + (r.soLanQuenIN ? 'tre' : '') + '">' + r.soLanQuenIN + '</td>' +
         '<td class="' + (r.soLanQuenRA ? 'tre' : '') + '">' + r.soLanQuenRA + '</td>' +
+        '<td>' + (r.soVangCoPhep || 0) + '</td>' +
+        '<td class="' + (r.soVangKhongBao ? 'tre' : '') + '">' + (r.soVangKhongBao || 0) + '</td>' +
         '<td class="' + (r.kpi < 100 ? 'tre' : 'okc') + '"><b>' + r.kpi + '%</b></td>' +
         '</tr>';
+      if (r.vangKhongBaoChiTiet && r.vangKhongBaoChiTiet.length) {
+        h += '<tr><td></td><td colspan="10" style="color:#c00">🔴 Vắng không báo: ' +
+          r.vangKhongBaoChiTiet.map(function (x) { return x.ngay + ' (' + x.ca + ')'; }).join('; ') + '</td></tr>';
+      }
     });
     h += '</table>';
     kq.innerHTML = h;
