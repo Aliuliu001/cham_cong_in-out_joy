@@ -111,6 +111,28 @@ function cellHM(x) {
   var m = s.match(/(\d\d:\d\d)/);
   return m ? m[1] : s;
 }
+// Giờ IN/OUT hiển thị trong báo cáo: nhận mọi kiểu Sheets trả về
+// (Date, số thập phân 0.333 = 8:00, chữ "8:00") -> luôn ra "HH:mm:ss".
+function fmtGioHMS(x) {
+  if (x instanceof Date) return Utilities.formatDate(x, TZ, 'HH:mm:ss');
+  if (typeof x === 'number' && !isNaN(x)) {
+    if (x > 0 && x < 1) {
+      var tot = Math.round(x * 86400);
+      var hh = Math.floor(tot / 3600), mm = Math.floor((tot % 3600) / 60), ss = tot % 60;
+      return ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2) + ':' + ('0' + ss).slice(-2);
+    }
+    return String(x);
+  }
+  var s = String(x == null ? '' : x).trim();
+  if (!s) return '';
+  if (/^\d*\.\d+$/.test(s)) {
+    var n = Number(s);
+    if (n > 0 && n < 1) return fmtGioHMS(n);
+  }
+  var m = s.match(/(\d{1,2})\s*:\s*(\d\d)(?:\s*:\s*(\d\d))?/);
+  if (m) return ('0' + m[1]).slice(-2) + ':' + m[2] + ':' + (m[3] || '00');
+  return s;
+}
 function cellMY(x) { // 'MM/yyyy'
   if (x instanceof Date) return Utilities.formatDate(x, TZ, 'MM/yyyy');
   return String(x || '').substring(3, 10);
@@ -254,9 +276,9 @@ function getBaoCaoNgay(ngayStr) {
     if (day !== ngayStr) continue;
     var ma = String(v[i][0]).trim();
     if (!map[ma]) map[ma] = { ma: ma, ten: String(v[i][1]), logs: [] };
-    // Convert Date object thành string HH:mm:ss
-    var gioIn = v[i][5] ? (v[i][5] instanceof Date ? Utilities.formatDate(v[i][5], TZ, 'HH:mm:ss') : String(v[i][5])) : '';
-    var gioOut = v[i][6] ? (v[i][6] instanceof Date ? Utilities.formatDate(v[i][6], TZ, 'HH:mm:ss') : String(v[i][6])) : '';
+    // Convert mọi kiểu Sheets trả về (Date / số thập phân / chữ) thành HH:mm:ss
+    var gioIn = v[i][5] ? fmtGioHMS(v[i][5]) : '';
+    var gioOut = v[i][6] ? fmtGioHMS(v[i][6]) : '';
     map[ma].logs.push({ gioIn: gioIn, gioOut: gioOut, type: String(v[i][4]),
       ca: String(v[i][3]), tre: Number(v[i][7] || 0), kc: Number(v[i][10] || 0),
       anh: String(v[i][9] || ''), note: String(v[i][8] || '') });
