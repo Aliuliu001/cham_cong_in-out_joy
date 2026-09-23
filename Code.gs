@@ -155,17 +155,21 @@ function submitCheckin(p) {
   var sh = ss.getSheetByName('CHECK IN');
   var todayStr = fmtD(new Date(p.openTs || new Date().getTime()));
 
-  // CHẶN SPAM: Kiểm tra xem hôm nay nhân viên đã check IN ca này chưa
+  // CHẶN SPAM: cùng 1 người + 1 ngày + 1 ca chỉ được 1 lần (IN hoặc VẮNG)
+  // Nới rộng điều kiện trong đoạn cũ — không thêm vòng lặp mới.
   if (p.type === 'IN' && !p.autoOutDone && !p.confirmed) {
     var rows = sh.getDataRange().getValues();
     for (var i = rows.length - 1; i >= 1; i--) {
       if (!rows[i][0]) continue;
       var rowDay = cellDay(rows[i][2]); // Ngày
       if (String(rows[i][0]).trim() === p.ma && rowDay === todayStr) {
-        // Kiểm tra xem đã có IN cùng ca này chưa
+        // Kiểm tra xem đã có IN hoặc VẮNG cùng ca này chưa
         var existingCa = String(rows[i][3]); // Ca
-        var existingType = String(rows[i][4]); // Loại (IN/OUT)
-        if (existingType === 'IN' && existingCa === p.caLabel) {
+        var existingType = String(rows[i][4]); // Loại (IN/OUT/VẮNG)
+        if (existingCa === p.caLabel && (existingType === 'IN' || existingType === 'VẮNG')) {
+          if (existingType === 'VẮNG') {
+            return { ok: false, msg: '❌ Ca [' + p.caLabel + '] đã báo VẮNG rồi, không thể check-in nữa!' };
+          }
           return { ok: false, msg: '❌ Bạn đã check-in ca [' + p.caLabel + '] ngày hôm nay rồi, không thể check-in lại!' };
         }
       }
@@ -589,16 +593,41 @@ function setupTrigger() {
 function submitBaoVang(p) {
   if (!p.ma || !p.ten) return { ok: false, msg: 'Vui lòng chọn mã và tên nhân viên.' };
   if (!p.caLabel) return { ok: false, msg: 'Vui lòng chọn ca cần báo vắng.' };
-  
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName('CHECK IN');
   if (!sh) return { ok: false, msg: 'Sheet CHECK IN không tồn tại. Vui lòng chạy setup() trước.' };
-  
+
   var ngayStr = fmtD(new Date(p.openTs || new Date().getTime()));
+
+  // CHẶN TRÙNG: tái dùng đúng luật của check-in — 1 người + 1 ngày + 1 ca chỉ 1 dòng.
+  // Nếu đã có IN hoặc VẮNG cùng ca thì từ chối, không ghi thêm.
+  var cv = sh.getDataRange().getValues();
+  for (var i = cv.length - 1; i >= 1; i--) {
+    if (!cv[i][0]) continue;
+    if (String(cv[i][0]).trim() === String(p.ma).trim() && cellDay(cv[i][2]) === ngayStr
+        && String(cv[i][3]) === String(p.caLabel)) {
+      var t = String(cv[i][4]);
+      if (t === 'VẮNG') return { ok: false, msg: '❌ Ca [' + p.caLabel + '] đã báo vắng rồi, không thể báo lại!' };
+      if (t === 'IN') return { ok: false, msg: '❌ Ca [' + p.caLabel + '] đã check-in rồi, không thể báo vắng nữa!' };
+    }
+    if (String(cv[i][0]).trim() === String(p.ma).trim() && cellDay(cv[i][2]) !== ngayStr) break;
+  }
+
+  // VẮNG bấm ở nhà được (không kiểm tra GPS/ảnh) nhưng giờ bấm vẫn so với giờ ca:
+  // đúng giờ/sớm = trễ 0, muộn = ghi số phút trễ như check-in thường.
+  var treVang = 0;
+  if (p.caBd) {
+    var chuan = chuanTime(p.caBd, p.openTs || new Date().getTime());
+    treVang = Math.max(0, Math.round(((p.openTs || new Date().getTime()) - chuan) / 60000));
+  }
+
   var ghiChu = (p.lyDo || 'Phụ huynh xin nghỉ') + ' (Báo vắng từ xa: ' + fmtDT(new Date(p.openTs || new Date().getTime())) + ')';
-  
+
   // Thứ tự cột: Mã, Tên, Ngày, Ca, Loại, Giờ in, Giờ out, Trễ, Ghi chú, Ảnh, Khoảng cách
-  sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel, 'VẮNG', '', '', 0, ghiChu, '', '']);
-  
-  return { ok: true, msg: 'Đã ghi nhận báo vắng ca [' + p.caLabel + '] thành công!' };
+  sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel, 'VẮNG', '', '', treVang, ghiChu, '', '']);
+
+  var msg = 'Đã ghi nhận báo vắng ca [' + p.caLabel + '] thành công!';
+  if (treVang > 0) msg += ' (Báo trễ ' + treVang + ' phút)';
+  return { ok: true, msg: msg, lateMin: treVang };
 }

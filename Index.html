@@ -18,6 +18,8 @@
     border: 2px solid #ccc; border-radius: 12px; background: #fff; }
   .typetabs button.on-in { border-color: #28a745; background: #e8f8ec; color: #1a7a33; }
   .typetabs button.on-out { border-color: #e67e22; background: #fef3e6; color: #b35a00; }
+  .typetabs button.on-vang { border-color: #c00; background: #fdecea; color: #a00; }
+  #lydoWrap { display: none; }
   .status { background: #f2f2f2; border-radius: 10px; padding: 10px; margin-top: 12px; font-size: 15px; }
   #btn { width: 100%; margin-top: 16px; padding: 16px; font-size: 19px; font-weight: bold;
     color: #fff; background: #5C4A3A; border: none; border-radius: 12px; }
@@ -35,6 +37,7 @@
   <div class="typetabs">
     <button id="tIn" type="button" onclick="chon('IN')">🟢 VÀO</button>
     <button id="tOut" type="button" onclick="chon('OUT')">🟠 RA</button>
+    <button id="tVang" type="button" onclick="chon('VANG')">🔴 VẮNG</button>
   </div>
 
   <label>Mã nhân viên</label>
@@ -45,6 +48,17 @@
 
   <label>Ca hôm nay</label>
   <select id="ca"><option value="">-- Chưa có lịch / chọn sau --</option></select>
+
+  <div id="lydoWrap">
+    <label>Lý do vắng</label>
+    <select id="lydo">
+      <option>Phụ huynh xin nghỉ</option>
+      <option>Ốm / việc gia đình</option>
+      <option>Lịch trống (không có lớp)</option>
+      <option>Lý do khác</option>
+    </select>
+    <div class="hint">Báo vắng bấm ở nhà được, không cần đến trung tâm. Giờ bấm so với giờ ca — muộn thì vẫn tính trễ.</div>
+  </div>
 
   <label>📸 Chụp ảnh khuôn mặt</label>
   <input type="file" id="photo" accept="image/*" capture="user">
@@ -69,7 +83,10 @@ function chon(t) {
   loai = t;
   document.getElementById('tIn').className = t === 'IN' ? 'on-in' : '';
   document.getElementById('tOut').className = t === 'OUT' ? 'on-out' : '';
-  document.getElementById('btn').textContent = t === 'OUT' ? 'XÁC NHẬN CHECK OUT' : 'XÁC NHẬN CHECK IN';
+  document.getElementById('tVang').className = t === 'VANG' ? 'on-vang' : '';
+  document.getElementById('btn').textContent =
+    t === 'OUT' ? 'XÁC NHẬN CHECK OUT' : (t === 'VANG' ? 'XÁC NHẬN BÁO VẮNG' : 'XÁC NHẬN CHECK IN');
+  document.getElementById('lydoWrap').style.display = t === 'VANG' ? '' : 'none';
   checkReady();
 }
 
@@ -156,12 +173,20 @@ function setCa(lich) {
 }
 
 function checkReady() {
+  // VẮNG bấm ở nhà: chỉ cần mã + ca + giờ mở trang, KHÔNG cần GPS/ảnh.
+  if (loai === 'VANG') {
+    document.getElementById('btn').disabled = !(openTs && document.getElementById('ma').value);
+    return;
+  }
   var ok = openTs && lat && lng && photoB64 &&
            document.getElementById('ma').value && loai;
   document.getElementById('btn').disabled = !ok;
 }
 
-document.getElementById('btn').onclick = function () { guiCheckin(); };
+document.getElementById('btn').onclick = function () {
+  if (loai === 'VANG') { guiBaoVang(); return; }
+  guiCheckin();
+};
 
 function guiCheckin() {
   var m = document.getElementById('msg');
@@ -223,7 +248,39 @@ function guiCheckin() {
     m.textContent = 'Gửi lỗi: ' + (e && e.message ? e.message : 'mạng yếu, bạn bấm lại giúp mình.');
     btn.disabled = false;
   });
-};
+}
+
+function guiBaoVang() {
+  var m = document.getElementById('msg');
+  var btn = document.getElementById('btn');
+  if (!caLabel) {
+    m.className = 'err';
+    m.textContent = 'Bạn chọn ca cần báo vắng giúp mình.';
+    return;
+  }
+  m.className = ''; m.textContent = 'Đang gửi báo vắng... (đừng tắt trang)';
+  btn.disabled = true;
+  google.script.run.withSuccessHandler(function (r) {
+    if (r.ok) {
+      m.className = 'ok';
+      m.textContent = '✅ ' + r.msg;
+      btn.style.display = 'none';
+    } else {
+      m.className = 'err';
+      m.textContent = r.msg;
+      btn.disabled = false;
+    }
+  }).submitBaoVang({
+    ma: document.getElementById('ma').value,
+    ten: document.getElementById('ten').value,
+    openTs: openTs, caBd: caBd, caLabel: caLabel,
+    lyDo: document.getElementById('lydo').value
+  }).withFailureHandler(function (e) {
+    m.className = 'err';
+    m.textContent = 'Gửi lỗi: ' + (e && e.message ? e.message : 'mạng yếu, bạn bấm lại giúp mình.');
+    btn.disabled = false;
+  });
+}
 </script>
 </body>
 </html>
