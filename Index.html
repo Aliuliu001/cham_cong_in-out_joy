@@ -66,12 +66,13 @@
   <div class="hint">Chụp mặt lúc này, không dùng ảnh cũ. Ảnh giữ nguyên, không lật.</div>
 
   <div class="status">🕐 Thời gian:<br><b id="time">Đang xác định...</b></div>
-  <div class="status">📍 Vị trí:<br><b id="gps">Đang xác định...</b></div>
+  <div class="status">📍 Vị trí:<br><b id="gps">Đang xác định...</b><br><button id="gpsBtn" type="button" onclick="layGPS()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ccc;background:#fff;font-size:14px;">📍 Lấy lại vị trí</button></div>
   <div class="hint">Lần đầu iPhone hỏi "Cho phép vị trí / camera" — bấm <b>Cho phép</b>.
     Nếu bấm nhầm Từ chối: vào Cài đặt → Safari → Vị trí/Camera → bật lại.</div>
 
   <button id="btn" disabled>XÁC NHẬN CHECK IN</button>
   <div id="msg"></div>
+  <div class="hint" id="checklist" style="margin-top:8px"></div>
 </div>
 
 <script>
@@ -105,18 +106,7 @@ window.onload = function () {
       s.appendChild(o);
     });
   }).getNhanVienList();
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(function (p) {
-      lat = p.coords.latitude; lng = p.coords.longitude; acc = Math.round(p.coords.accuracy || 0);
-      document.getElementById('gps').textContent = 'Đã xác định (±' + acc + 'm)' +
-        (acc > 100 ? ' — chỗ này GPS yếu, bạn ra chỗ thoáng thử lại nhé.' : '');
-      checkReady();
-    }, function () {
-      document.getElementById('gps').textContent = 'Bạn cần cho phép trình duyệt sử dụng vị trí.';
-    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
-  } else {
-    document.getElementById('gps').textContent = 'Máy này không lấy được vị trí GPS.';
-  }
+  layGPS();
   document.getElementById('ma').onchange = function () {
     document.getElementById('ten').value = nvMap[this.value] || '';
     var ma = this.value;
@@ -165,6 +155,28 @@ window.onload = function () {
   };
 };
 
+function layGPS() {
+  document.getElementById('gps').textContent = 'Đang xác định...';
+  if (!navigator.geolocation) {
+    document.getElementById('gps').textContent = 'Máy này không lấy được vị trí GPS.';
+    checkReady();
+    return;
+  }
+  // Safari iPhone: lần đầu hỏi quyền, nếu bấm nhầm Từ chối thì hàm lỗi chạy
+  navigator.geolocation.getCurrentPosition(function (p) {
+    lat = p.coords.latitude; lng = p.coords.longitude; acc = Math.round(p.coords.accuracy || 0);
+    document.getElementById('gps').textContent = 'Đã xác định (±' + acc + 'm)' +
+      (acc > 100 ? ' — chỗ này GPS yếu, bạn ra chỗ thoáng thử lại nhé.' : '');
+    checkReady();
+  }, function (e) {
+    var msg = 'Bạn cần cho phép trình duyệt sử dụng vị trí, rồi bấm "Lấy lại vị trí".';
+    if (e && e.code === 1) msg = 'Bạn đã bấm Từ chối vị trí. Mở link bằng Safari (đừng mở trong Zalo/Messenger), vào Cài đặt → Safari → Vị trí → bật lại, rồi bấm "Lấy lại vị trí".';
+    else if (e && e.code === 3) msg = 'Hết giờ chờ GPS (mạng yếu). Bạn bấm "Lấy lại vị trí" thử lại.';
+    document.getElementById('gps').textContent = msg;
+    checkReady();
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+}
+
 function setCa(lich) {
   var c = document.getElementById('ca');
   var l = lich[Number(c.value) || 0];
@@ -176,8 +188,18 @@ function checkReady() {
   // VẮNG bấm ở nhà: chỉ cần mã + ca + giờ mở trang, KHÔNG cần GPS/ảnh.
   if (loai === 'VANG') {
     document.getElementById('btn').disabled = !(openTs && document.getElementById('ma').value);
+    document.getElementById('checklist').textContent =
+      !document.getElementById('ma').value ? 'Bạn chọn mã nhân viên giúp mình.' : '';
     return;
   }
+  var thieu = [];
+  if (!loai) thieu.push('chọn VÀO/RA');
+  if (!document.getElementById('ma').value) thieu.push('chọn mã');
+  if (!openTs) thieu.push('chờ giờ máy');
+  if (!lat || !lng) thieu.push('chờ vị trí GPS');
+  if (!photoB64) thieu.push('chụp ảnh');
+  document.getElementById('checklist').textContent =
+    thieu.length ? 'Còn thiếu: ' + thieu.join(' + ') + '.' : 'Đủ hết rồi, bạn bấm nút xác nhận nhé.';
   var ok = openTs && lat && lng && photoB64 &&
            document.getElementById('ma').value && loai;
   document.getElementById('btn').disabled = !ok;

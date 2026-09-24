@@ -180,7 +180,7 @@ function submitCheckin(p) {
   // CHẶN SPAM: cùng 1 người + 1 ngày + 1 ca chỉ được 1 lần (IN hoặc VẮNG)
   // Nới rộng điều kiện trong đoạn cũ — không thêm vòng lặp mới.
   if (p.type === 'IN' && !p.autoOutDone && !p.confirmed) {
-    var rows = sh.getDataRange().getValues();
+    var rows = sh.getDataRange().getDisplayValues();
     for (var i = rows.length - 1; i >= 1; i--) {
       if (!rows[i][0]) continue;
       var rowDay = cellDay(rows[i][2]); // Ngày
@@ -203,7 +203,7 @@ function submitCheckin(p) {
   var note = '';
   var autoOutRow = null;
   if (p.type === 'IN' && !p.autoOutDone) {
-    var rows = sh.getDataRange().getValues();
+    var rows = sh.getDataRange().getDisplayValues();
     for (var i = rows.length - 1; i >= 1; i--) {
       if (!rows[i][0]) continue;
       var rowDay = cellDay(rows[i][2]); // Ngày
@@ -267,7 +267,7 @@ function getFolder() {
 function getBaoCaoNgay(ngayStr) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN');
   if (!sh || sh.getLastRow() < 2) return [];
-  var v = sh.getDataRange().getValues();
+  var v = sh.getDataRange().getDisplayValues();
   var map = {};
   // Thứ tự cột mới: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại, 5:Giờ in, 6:Giờ out, 7:Trễ, 8:Ghi chú, 9:Link ảnh, 10:Khoảng cách
   for (var i = 1; i < v.length; i++) {
@@ -340,7 +340,7 @@ function getChuaCham(ngayStr) {
   var daChamHoacVang = {};
   var caDaChamTheoNgay = {}; // ngay -> danh sách ca đã có IN/VẮNG (dạng full label)
   if (shC && shC.getLastRow() >= 2) {
-    var cv = shC.getDataRange().getValues();
+    var cv = shC.getDataRange().getDisplayValues();
     // Cột: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại
     for (var j = 1; j < cv.length; j++) {
       var day = cellDay(cv[j][2]);
@@ -404,7 +404,7 @@ function getBaoCaoThang(ma, thangStr) {
   var res = { ma: ma, ten: '', thang: thangStr, tongGio: 0, gioTangCuong: 0, soCa: 0, soLanTre: 0,
     soLanQuenIN: 0, soLanQuenRA: 0, soVangCoPhep: 0, soVangKhongBao: 0, vangKhongBaoChiTiet: [], kpi: 100, chiTiet: [] };
   if (!sh || sh.getLastRow() < 2) return res;
-  var v = sh.getDataRange().getValues();
+  var v = sh.getDataRange().getDisplayValues();
   var rows = [];
   // Cột mới: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại, 5:Giờ in, 6:Giờ out, 7:Trễ, 8:Ghi chú
   for (var i = 1; i < v.length; i++) {
@@ -509,7 +509,7 @@ function tinhVangKhongBao(ma, thangStr, res) {
     if (thuCell) continue;
   }
   // Gom các dòng IN/VẮNG đã có: ngay -> [ca...]
-  var cv = shC.getDataRange().getValues();
+  var cv = shC.getDataRange().getDisplayValues();
   var daCo = {};
   for (var j = 1; j < cv.length; j++) {
     if (!cv[j][0] || String(cv[j][0]).trim() !== ma) continue;
@@ -645,7 +645,7 @@ function xuatBaoCaoSheet(thangStr) {
   var shCheck = ss.getSheetByName('CHECK IN');
   var errRows = [];
   if (shCheck && shCheck.getLastRow() >= 2) {
-    var v = shCheck.getDataRange().getValues();
+    var v = shCheck.getDataRange().getDisplayValues();
     for (var i = 1; i < v.length; i++) {
       if (!v[i][0]) continue;
       var ngay = cellDay(v[i][2]);
@@ -662,11 +662,11 @@ function xuatBaoCaoSheet(thangStr) {
       // Kiểm tra lỗi:
       // 1. Trễ IN (>0 phút)
       if (loai === 'IN' && tre > 0) {
-        errRows.push([ngay, ma, ten, ca, 'Trễ IN', tre + 'p', note]);
+        errRows.push([ngay, ma, ten, ca, 'Đi làm trễ', tre + 'p', note]);
       }
       // 1b. VẮNG bấm muộn (>0 phút) — trừ KPI như đi trễ
       if (loai === 'VẮNG' && tre > 0) {
-        errRows.push([ngay, ma, ten, ca, 'Vắng báo trễ', tre + 'p', note]);
+        errRows.push([ngay, ma, ten, ca, 'Đi làm trễ (báo vắng muộn)', tre + 'p', note]);
       }
       // 1c. VẮNG đúng giờ — chỉ ghi nhận, không trừ KPI
       if (loai === 'VẮNG' && !(tre > 0)) {
@@ -674,7 +674,7 @@ function xuatBaoCaoSheet(thangStr) {
       }
       // 2. Quên OUT / Hệ thống tự OUT
       if (note.indexOf('Quên check out') !== -1 || note.indexOf('tự OUT') !== -1) {
-        errRows.push([ngay, ma, ten, ca, 'Quên OUT', '', note]);
+        errRows.push([ngay, ma, ten, ca, 'Quên check out', '', note]);
       }
     }
   }
@@ -684,7 +684,7 @@ function xuatBaoCaoSheet(thangStr) {
   list.forEach(function (n) {
     var r = baoThang[n.ma];
     (r.vangKhongBaoChiTiet || []).forEach(function (x) {
-      errRows.push([x.ngay, n.ma, n.ten, x.ca, 'Vắng không báo', '', 'Không check-in, không báo vắng — tính như trễ để trừ KPI']);
+      errRows.push([x.ngay, n.ma, n.ten, x.ca, 'Vắng không báo', '', '']);
     });
   });
   if (errRows.length > 0) {
@@ -760,7 +760,7 @@ function submitBaoVang(p) {
 
   // CHẶN TRÙNG: tái dùng đúng luật của check-in — 1 người + 1 ngày + 1 ca chỉ 1 dòng.
   // Nếu đã có IN hoặc VẮNG cùng ca thì từ chối, không ghi thêm.
-  var cv = sh.getDataRange().getValues();
+  var cv = sh.getDataRange().getDisplayValues();
   for (var i = cv.length - 1; i >= 1; i--) {
     if (!cv[i][0]) continue;
     if (String(cv[i][0]).trim() === String(p.ma).trim() && cellDay(cv[i][2]) === ngayStr
