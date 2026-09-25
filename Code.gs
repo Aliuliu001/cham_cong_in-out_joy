@@ -30,12 +30,11 @@ function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureTab(ss, 'CHECK IN',
     ['Mã NV', 'Họ và tên', 'Ngày', 'Ca', 'Loại IN/OUT', 'Giờ check in', 'Giờ check out', 'Trễ (phút)', 'Ghi chú', 'Link ảnh', 'Khoảng cách (m)', 'Thiết bị']);
-  ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ tên', 'Vai trò (Giáo viên/Văn phòng)', 'Thiết bị quen thuộc']);
+  ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ tên', 'Vai trò (Giáo viên/Văn phòng)']);
   ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
   ensureTab(ss, 'BAOCAO_THANG', ['Mã NV', 'Họ tên', 'Tổng giờ', 'Giờ tăng cường', 'Số ca', 'Số lần trễ', 'Số lần quên IN', 'Số lần quên OUT', 'KPI (%)']);
   // Sheet đã có từ trước thì thêm cột mới vào cuối header nếu còn thiếu
   themCotNeuThieu(ss, 'CHECK IN', 12, 'Thiết bị');
-  themCotNeuThieu(ss, 'DANHSACH', 4, 'Thiết bị quen thuộc');
 }
 
 function themCotNeuThieu(ss, tenSheet, cot, tieuDe) {
@@ -248,47 +247,49 @@ function submitCheckin(p) {
     lateMin = Math.max(0, Math.round((p.openTs - chuan) / 60000));
   }
 
+  // 1 máy chấm cho 2 người cùng ngày = cheat: vẫn cho qua, nhưng ghi rõ vào Ghi chú.
+  var canhBaoChungMay = kiemTraChungMay(p.ma, todayStr, p.device || '');
+
   var folder = getFolder();
   var ext = 'jpg';
   var fname = p.ma + '_' + fmtFile(new Date(p.openTs)) + '_' + p.type + '.' + ext;
   var blob = Utilities.newBlob(Utilities.base64Decode(p.photo), 'image/jpeg', fname);
   var file = folder.createFile(blob);
 
-  // Ghi nhớ máy: lần đầu máy nào check cho mã nào thì lưu vào DANHSACH,
-  // lần sau máy lạ check cho mã đó thì báo rõ trong Ghi chú để bạn nhìn thấy.
-  var canhBaoMayLa = kiemTraThietBi(p.ma, p.device || '');
-
   // Thứ tự cột mới: Mã, Tên, Ngày, Ca, Loại IN/OUT, Giờ check in, Giờ check out, Trễ, Ghi chú, Link ảnh, Khoảng cách, Thiết bị
   var ngayStr = fmtD(new Date(p.openTs));
   var checkInTime = p.type === 'IN' ? cellHM(new Date(p.openTs)) : '';
   var checkOutTime = p.type === 'OUT' ? cellHM(new Date(p.openTs)) : '';
-  var noteFull = [note, canhBaoMayLa].filter(function (x) { return x; }).join(' | ');
+  var noteFull = [note, canhBaoChungMay.ghiChu].filter(function (x) { return x; }).join(' | ');
   
   sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel || '', p.type, checkInTime, checkOutTime, lateMin, noteFull, file.getUrl(), distM, p.device || '']);
 
-  return { ok: true, time: p.openText, distance: distM, lateMin: lateMin, type: p.type, canhBao: canhBaoMayLa };
+  return { ok: true, time: p.openText, distance: distM, lateMin: lateMin, type: p.type,
+    canhBao: canhBaoChungMay.popup, chungMay: canhBaoChungMay.chungMay };
 }
 
-// Máy quen/máy lạ: DANHSACH cột D lưu máy quen. Lần đầu tự lưu, lần sau khác máy thì báo.
-function kiemTraThietBi(ma, device) {
-  if (!device) return '';
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DANHSACH');
-  if (!sh || sh.getLastRow() < 2) return '';
+// 1 máy chấm cho 2 mã trong cùng ngày: quét các dòng IN/VẮNG hôm nay có cùng
+// mã máy nhưng khác mã NV thì gắn cờ. Vẫn cho qua, chỉ ghi chú + popup.
+function kiemTraChungMay(ma, todayStr, device) {
+  var out = { ghiChu: '', popup: '', chungMay: false };
+  if (!device) return out;
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN');
+  if (!sh || sh.getLastRow() < 2) return out;
   var v = sh.getDataRange().getDisplayValues();
   for (var i = 1; i < v.length; i++) {
-    if (String(v[i][0]).trim() !== String(ma).trim()) continue;
-    var quen = String(v[i][3] || '').trim();
-    if (!quen) {
-      // Lần đầu: lưu luôn máy này làm máy quen, không báo gì
-      sh.getRange(i + 1, 4).setValue(device);
-      return '';
-    }
-    if (quen !== device.trim()) {
-      return '⚠️ Máy lạ (quen: ' + quen + ')';
-    }
-    return '';
+    if (!v[i][0]) continue;
+    if (cellDay(v[i][2]) !== todayStr) continue;
+    var loai = String(v[i][4]);
+    if (loai !== 'IN' && loai !== 'VẮNG') continue;
+    if (String(v[i][11] || '').trim() !== device.trim()) continue;
+    if (String(v[i][0]).trim() === String(ma).trim()) continue;
+    var maKia = String(v[i][0]).trim() + ' ' + String(v[i][1] || '').trim();
+    out.chungMay = true;
+    out.ghiChu = '⚠️ 1 máy chấm cho 2 người (kia: ' + maKia + ')';
+    out.popup = 'Hủm! Máy này hôm nay đã chấm cho ' + maKia + ' rồi đó. Bạn đang chấm giùm phải không? Hệ thống đã ghi lại nhé 😄';
+    return out;
   }
-  return '';
+  return out;
 }
 
 function getFolder() {
@@ -711,6 +712,10 @@ function xuatBaoCaoSheet(thangStr) {
       // 2. Quên OUT / Hệ thống tự OUT
       if (note.indexOf('Quên check out') !== -1 || note.indexOf('tự OUT') !== -1) {
         errRows.push([ngay, ma, ten, ca, 'Quên check out', '', note]);
+      }
+      // 2b. 1 máy chấm cho 2 người cùng ngày
+      if (note.indexOf('1 máy chấm cho 2 người') !== -1) {
+        errRows.push([ngay, ma, ten, ca, '1 máy – 2 người', '', note]);
       }
     }
   }

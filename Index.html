@@ -285,7 +285,8 @@ function guiCheckin() {
       m.className = 'ok';
       m.innerHTML = '✅ CHECK ' + (r.type === 'OUT' ? 'OUT' : 'IN') + ' THÀNH CÔNG!<br>🕐 Thời gian: ' + r.time +
         '<br>📍 Khoảng cách: ' + r.distance + ' m' +
-        (r.type === 'IN' && r.lateMin > 0 ? '<br>⏰ Trễ: ' + r.lateMin + ' phút' : '');
+        (r.type === 'IN' && r.lateMin > 0 ? '<br>⏰ Trễ: ' + r.lateMin + ' phút' : '') +
+        (r.canhBao ? '<br><br>😄 ' + r.canhBao : '');
       document.getElementById('btn').style.display = 'none';
       // Khóa camera để chống spam tiếp
       tatCamera();
