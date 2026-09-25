@@ -60,10 +60,18 @@
     <div class="hint">Báo vắng bấm ở nhà được, không cần đến trung tâm. Giờ bấm so với giờ ca — muộn thì vẫn tính trễ.</div>
   </div>
 
-  <label>📸 Chụp ảnh khuôn mặt</label>
-  <input type="file" id="photo" accept="image/*" capture="user">
-  <img id="preview" alt="Ảnh đã chụp">
-  <div class="hint">Chụp mặt lúc này, không dùng ảnh cũ. Ảnh giữ nguyên, không lật.</div>
+  <div id="camWrap">
+    <label>📸 Chụp ảnh khuôn mặt (chụp trực tiếp)</label>
+    <video id="cam" playsinline muted style="width:100%;border-radius:10px;display:none;background:#000"></video>
+    <img id="preview" alt="Ảnh đã chụp">
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button id="camOpen" type="button" onclick="moCamera()" style="flex:1;padding:12px;border-radius:10px;border:1px solid #ccc;background:#fff;font-size:15px;font-weight:bold;">📷 Mở camera</button>
+      <button id="camSnap" type="button" onclick="chupAnh()" disabled style="flex:1;padding:12px;border-radius:10px;border:none;background:#5C4A3A;color:#fff;font-size:15px;font-weight:bold;">🤳 Chụp</button>
+      <button id="camRetake" type="button" onclick="moCamera()" disabled style="flex:1;padding:12px;border-radius:10px;border:1px solid #ccc;background:#fff;font-size:15px;">🔄 Chụp lại</button>
+    </div>
+    <div class="hint">Máy chỉ nhận ảnh vừa chụp bằng camera, không chọn được ảnh cũ.</div>
+    <div class="err" id="camErr"></div>
+  </div>
 
   <div class="status">🕐 Thời gian:<br><b id="time">Đang xác định...</b></div>
   <div class="status">📍 Vị trí:<br><b id="gps">Đang xác định...</b><br><button id="gpsBtn" type="button" onclick="layGPS()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ccc;background:#fff;font-size:14px;">📍 Lấy lại vị trí</button></div>
@@ -77,7 +85,8 @@
 
 <script>
 var openTs = 0, openText = '', lat = 0, lng = 0, acc = 0, photoB64 = '',
-    loai = '', caBd = '', caLabel = '', autoOutDone = false, autoOutData = null;
+    loai = '', caBd = '', caLabel = '', autoOutDone = false, autoOutData = null,
+    deviceId = '', deviceLabel = '', camStream = null;
 var nvMap = {};
 
 function chon(t) {
@@ -88,6 +97,7 @@ function chon(t) {
   document.getElementById('btn').textContent =
     t === 'OUT' ? 'XÁC NHẬN CHECK OUT' : (t === 'VANG' ? 'XÁC NHẬN BÁO VẮNG' : 'XÁC NHẬN CHECK IN');
   document.getElementById('lydoWrap').style.display = t === 'VANG' ? '' : 'none';
+  document.getElementById('camWrap').style.display = t === 'VANG' ? 'none' : '';
   checkReady();
 }
 
@@ -107,6 +117,17 @@ window.onload = function () {
     });
   }).getNhanVienList();
   layGPS();
+  chon('IN');
+  // Ghi nhớ máy: lần đầu máy nào check-in cho mã nào thì nhớ, lần sau máy lạ
+  // check-in cho mã đó thì máy ghi lại tên máy vào Sheet để bạn nhìn thấy.
+  try {
+    if (!localStorage.getItem('joyDeviceId')) {
+      localStorage.setItem('joyDeviceId', 'DT-' + Date.now().toString(36).toUpperCase());
+    }
+    deviceId = localStorage.getItem('joyDeviceId');
+    var lbl = (navigator.platform || '') + ' ' + (navigator.userAgent.match(/iPhone|Android/i) || [''])[0];
+    deviceLabel = (lbl.trim() || 'Điện thoại') + ' (' + deviceId + ')';
+  } catch (e) { deviceLabel = 'Điện thoại'; }
   document.getElementById('ma').onchange = function () {
     document.getElementById('ten').value = nvMap[this.value] || '';
     var ma = this.value;
@@ -125,35 +146,66 @@ window.onload = function () {
     }).getLichHomNay(ma);
     checkReady();
   };
-  document.getElementById('photo').onchange = function () {
-    var f = this.files[0];
-    if (!f) return;
-    var img = new Image();
-    img.onerror = function () {
-      document.getElementById('msg').className = 'err';
-      document.getElementById('msg').textContent = 'Ảnh lỗi, bạn chụp lại giúp mình.';
-    };
-    img.onload = function () {
-      // Nén ảnh bằng canvas, GIỮ NGUYÊN hướng (không dùng ctx.scale(-1,1))
-      // Ảnh nhỏ (~100-150KB) để gửi nhanh, không treo ở mạng yếu
-      var max = 800, w = img.width, h = img.height;
-      if (w > max || h > max) {
-        var r = Math.min(max / w, max / h);
-        w = Math.round(w * r); h = Math.round(h * r);
-      }
-      var cv = document.createElement('canvas');
-      cv.width = w; cv.height = h;
-      cv.getContext('2d').drawImage(img, 0, 0, w, h);
-      var url = cv.toDataURL('image/jpeg', 0.6);
-      photoB64 = url.split(',')[1];
-      URL.revokeObjectURL(img.src);
-      var pv = document.getElementById('preview');
-      pv.src = url; pv.style.display = 'block';
-      checkReady();
-    };
-    img.src = URL.createObjectURL(f);
-  };
 };
+
+// Camera trực tiếp: chỉ nhận ảnh vừa chụp, không chọn ảnh cũ
+function moCamera() {
+  var err = document.getElementById('camErr');
+  err.textContent = '';
+  var video = document.getElementById('cam');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    err.textContent = 'Máy này không mở được camera. Bạn dùng Safari/Chrome mới giúp mình.';
+    return;
+  }
+  tatCamera();
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+    .then(function (stream) {
+      camStream = stream;
+      video.srcObject = stream;
+      video.style.display = 'block';
+      video.play();
+      document.getElementById('camSnap').disabled = false;
+      document.getElementById('camRetake').disabled = false;
+      checkReady();
+    })
+    .catch(function () {
+      err.textContent = 'Bạn cần bấm Cho phép camera, rồi bấm Mở camera lại.';
+    });
+}
+function tatCamera() {
+  try {
+    if (camStream) { camStream.getTracks().forEach(function (t) { t.stop(); }); }
+  } catch (e) {}
+  camStream = null;
+  var video = document.getElementById('cam');
+  if (video) { video.pause(); video.srcObject = null; video.style.display = 'none'; }
+}
+function chupAnh() {
+  var err = document.getElementById('camErr');
+  err.textContent = '';
+  var video = document.getElementById('cam');
+  if (!camStream || !video.videoWidth) {
+    err.textContent = 'Bạn bấm Mở camera trước, rồi mới bấm Chụp.';
+    return;
+  }
+  var max = 800, w = video.videoWidth, h = video.videoHeight;
+  if (w > max || h > max) {
+    var r = Math.min(max / w, max / h);
+    w = Math.round(w * r); h = Math.round(h * r);
+  }
+  var cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  cv.getContext('2d').drawImage(video, 0, 0, w, h);
+  var url = cv.toDataURL('image/jpeg', 0.6);
+  photoB64 = url.split(',')[1];
+  var pv = document.getElementById('preview');
+  pv.src = url; pv.style.display = 'block';
+  tatCamera();
+  document.getElementById('camSnap').disabled = true;
+  document.getElementById('msg').className = 'ok';
+  document.getElementById('msg').textContent = '✅ Đã chụp xong. Bạn bấm nút xác nhận nhé.';
+  checkReady();
+}
 
 function layGPS() {
   document.getElementById('gps').textContent = 'Đang xác định...';
@@ -235,8 +287,10 @@ function guiCheckin() {
         '<br>📍 Khoảng cách: ' + r.distance + ' m' +
         (r.type === 'IN' && r.lateMin > 0 ? '<br>⏰ Trễ: ' + r.lateMin + ' phút' : '');
       document.getElementById('btn').style.display = 'none';
-      // Khóa chọn loại và chụp ảnh để chống spam tiếp
-      document.getElementById('photo').disabled = true;
+      // Khóa camera để chống spam tiếp
+      tatCamera();
+      document.getElementById('camSnap').disabled = true;
+      document.getElementById('camRetake').disabled = true;
     } else if (r.needAutoOut) {
       clearTimeout(timeoutId);
       btn.disabled = false;
@@ -263,7 +317,8 @@ function guiCheckin() {
     ten: document.getElementById('ten').value,
     lat: lat, lng: lng, photo: photoB64, type: loai,
     openTs: openTs, openText: openText, submitText: submitText,
-    caBd: caBd, caLabel: caLabel, autoOutDone: autoOutDone, autoOutData: autoOutData
+    caBd: caBd, caLabel: caLabel, autoOutDone: autoOutDone, autoOutData: autoOutData,
+    device: deviceLabel
   }).withFailureHandler(function (e) {
     clearTimeout(timeoutId);
     m.className = 'err';

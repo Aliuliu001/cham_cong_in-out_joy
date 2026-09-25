@@ -29,10 +29,19 @@ function doGet(e) {
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureTab(ss, 'CHECK IN',
-    ['Mã NV', 'Họ và tên', 'Ngày', 'Ca', 'Loại IN/OUT', 'Giờ check in', 'Giờ check out', 'Trễ (phút)', 'Ghi chú', 'Link ảnh', 'Khoảng cách (m)']);
-  ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ tên', 'Vai trò (Giáo viên/Văn phòng)']);
+    ['Mã NV', 'Họ và tên', 'Ngày', 'Ca', 'Loại IN/OUT', 'Giờ check in', 'Giờ check out', 'Trễ (phút)', 'Ghi chú', 'Link ảnh', 'Khoảng cách (m)', 'Thiết bị']);
+  ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ tên', 'Vai trò (Giáo viên/Văn phòng)', 'Thiết bị quen thuộc']);
   ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
   ensureTab(ss, 'BAOCAO_THANG', ['Mã NV', 'Họ tên', 'Tổng giờ', 'Giờ tăng cường', 'Số ca', 'Số lần trễ', 'Số lần quên IN', 'Số lần quên OUT', 'KPI (%)']);
+  // Sheet đã có từ trước thì thêm cột mới vào cuối header nếu còn thiếu
+  themCotNeuThieu(ss, 'CHECK IN', 12, 'Thiết bị');
+  themCotNeuThieu(ss, 'DANHSACH', 4, 'Thiết bị quen thuộc');
+}
+
+function themCotNeuThieu(ss, tenSheet, cot, tieuDe) {
+  var sh = ss.getSheetByName(tenSheet);
+  if (!sh || sh.getLastRow() === 0) return;
+  if (!String(sh.getRange(1, cot).getValue()).trim()) sh.getRange(1, cot).setValue(tieuDe);
 }
 
 function ensureTab(ss, name, headers) {
@@ -227,8 +236,8 @@ function submitCheckin(p) {
   if (p.autoOutDone && p.autoOutData) {
     var a = p.autoOutData;
     var ngayStr = fmtD(new Date(p.openTs));
-    // Thứ tự cột mới: Mã, Tên, Ngày, Ca, Loại, Giờ in, Giờ out, Trễ, Ghi chú, Ảnh, Khoảng cách
-    sh.appendRow([p.ma, a.ten, ngayStr, a.ca, 'OUT', '', a.outTime, 0, '⚠️ Quên check out (Hệ thống tự OUT)', '', '']);
+    // Thứ tự cột mới: Mã, Tên, Ngày, Ca, Loại, Giờ in, Giờ out, Trễ, Ghi chú, Ảnh, Khoảng cách, Thiết bị
+    sh.appendRow([p.ma, a.ten, ngayStr, a.ca, 'OUT', '', a.outTime, 0, '⚠️ Quên check out (Hệ thống tự OUT)', '', '', p.device || '']);
   }
   
   if (p.autoOutDone) note = 'VÀO ca mới sau khi hệ thống tự OUT ca trước';
@@ -245,14 +254,41 @@ function submitCheckin(p) {
   var blob = Utilities.newBlob(Utilities.base64Decode(p.photo), 'image/jpeg', fname);
   var file = folder.createFile(blob);
 
-  // Thứ tự cột mới: Mã, Tên, Ngày, Ca, Loại IN/OUT, Giờ check in, Giờ check out, Trễ, Ghi chú, Link ảnh, Khoảng cách
+  // Ghi nhớ máy: lần đầu máy nào check cho mã nào thì lưu vào DANHSACH,
+  // lần sau máy lạ check cho mã đó thì báo rõ trong Ghi chú để bạn nhìn thấy.
+  var canhBaoMayLa = kiemTraThietBi(p.ma, p.device || '');
+
+  // Thứ tự cột mới: Mã, Tên, Ngày, Ca, Loại IN/OUT, Giờ check in, Giờ check out, Trễ, Ghi chú, Link ảnh, Khoảng cách, Thiết bị
   var ngayStr = fmtD(new Date(p.openTs));
   var checkInTime = p.type === 'IN' ? cellHM(new Date(p.openTs)) : '';
   var checkOutTime = p.type === 'OUT' ? cellHM(new Date(p.openTs)) : '';
+  var noteFull = [note, canhBaoMayLa].filter(function (x) { return x; }).join(' | ');
   
-  sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel || '', p.type, checkInTime, checkOutTime, lateMin, note, file.getUrl(), distM]);
+  sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel || '', p.type, checkInTime, checkOutTime, lateMin, noteFull, file.getUrl(), distM, p.device || '']);
 
-  return { ok: true, time: p.openText, distance: distM, lateMin: lateMin, type: p.type };
+  return { ok: true, time: p.openText, distance: distM, lateMin: lateMin, type: p.type, canhBao: canhBaoMayLa };
+}
+
+// Máy quen/máy lạ: DANHSACH cột D lưu máy quen. Lần đầu tự lưu, lần sau khác máy thì báo.
+function kiemTraThietBi(ma, device) {
+  if (!device) return '';
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DANHSACH');
+  if (!sh || sh.getLastRow() < 2) return '';
+  var v = sh.getDataRange().getDisplayValues();
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][0]).trim() !== String(ma).trim()) continue;
+    var quen = String(v[i][3] || '').trim();
+    if (!quen) {
+      // Lần đầu: lưu luôn máy này làm máy quen, không báo gì
+      sh.getRange(i + 1, 4).setValue(device);
+      return '';
+    }
+    if (quen !== device.trim()) {
+      return '⚠️ Máy lạ (quen: ' + quen + ')';
+    }
+    return '';
+  }
+  return '';
 }
 
 function getFolder() {
