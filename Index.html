@@ -25,6 +25,9 @@
     color: #fff; background: #5C4A3A; border: none; border-radius: 12px; }
   #btn:disabled { background: #c9bfae; }
   #preview { width: 100%; border-radius: 10px; margin-top: 8px; display: none; }
+  .file-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+  #photoBtn { width: 100%; padding: 14px; font-size: 16px; font-weight: bold;
+    border: 2px dashed #5C4A3A; border-radius: 10px; background: #F6F3EE; color: #5C4A3A; }
   .err { color: #c00; margin-top: 8px; font-weight: bold; }
   .ok { color: #1a7a33; margin-top: 8px; font-weight: bold; }
   .hint { font-size: 13px; color: #555; margin-top: 6px; }
@@ -61,16 +64,11 @@
   </div>
 
   <div id="camWrap">
-    <label>📸 Chụp ảnh khuôn mặt (chụp trực tiếp)</label>
-    <video id="cam" playsinline muted style="width:100%;border-radius:10px;display:none;background:#000"></video>
+    <label>📸 Chụp ảnh khuôn mặt</label>
+    <button id="photoBtn" type="button" onclick="document.getElementById('photo').click()">📷 Bấm để chụp ảnh</button>
+    <input type="file" id="photo" class="file-hidden" tabindex="-1" accept="image/*" capture="user">
     <img id="preview" alt="Ảnh đã chụp">
-    <div style="display:flex;gap:8px;margin-top:8px;">
-      <button id="camOpen" type="button" onclick="moCamera()" style="flex:1;padding:12px;border-radius:10px;border:1px solid #ccc;background:#fff;font-size:15px;font-weight:bold;">📷 Mở camera</button>
-      <button id="camSnap" type="button" onclick="chupAnh()" disabled style="flex:1;padding:12px;border-radius:10px;border:none;background:#5C4A3A;color:#fff;font-size:15px;font-weight:bold;">🤳 Chụp</button>
-      <button id="camRetake" type="button" onclick="moCamera()" disabled style="flex:1;padding:12px;border-radius:10px;border:1px solid #ccc;background:#fff;font-size:15px;">🔄 Chụp lại</button>
-    </div>
-    <div class="hint">Máy chỉ nhận ảnh vừa chụp bằng camera, không chọn được ảnh cũ.</div>
-    <div class="err" id="camErr"></div>
+    <div class="hint">Bấm nút là mở camera chụp ngay, không chọn được ảnh cũ.</div>
   </div>
 
   <div class="status">🕐 Thời gian:<br><b id="time">Đang xác định...</b></div>
@@ -86,7 +84,7 @@
 <script>
 var openTs = 0, openText = '', lat = 0, lng = 0, acc = 0, photoB64 = '',
     loai = '', caBd = '', caLabel = '', autoOutDone = false, autoOutData = null,
-    deviceId = '', deviceLabel = '', camStream = null;
+    deviceId = '', deviceLabel = '';
 var nvMap = {};
 
 function chon(t) {
@@ -146,65 +144,39 @@ window.onload = function () {
     }).getLichHomNay(ma);
     checkReady();
   };
+  document.getElementById('photo').onchange = function () {
+    xuLyAnhChup(this.files[0]);
+    this.value = '';
+  };
 };
 
-// Camera trực tiếp: chỉ nhận ảnh vừa chụp, không chọn ảnh cũ
-function moCamera() {
-  var err = document.getElementById('camErr');
-  err.textContent = '';
-  var video = document.getElementById('cam');
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    err.textContent = 'Máy này không mở được camera. Bạn dùng Safari/Chrome mới giúp mình.';
-    return;
-  }
-  tatCamera();
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
-    .then(function (stream) {
-      camStream = stream;
-      video.srcObject = stream;
-      video.style.display = 'block';
-      video.play();
-      document.getElementById('camSnap').disabled = false;
-      document.getElementById('camRetake').disabled = false;
-      checkReady();
-    })
-    .catch(function () {
-      err.textContent = 'Bạn cần bấm Cho phép camera, rồi bấm Mở camera lại.';
-    });
-}
-function tatCamera() {
-  try {
-    if (camStream) { camStream.getTracks().forEach(function (t) { t.stop(); }); }
-  } catch (e) {}
-  camStream = null;
-  var video = document.getElementById('cam');
-  if (video) { video.pause(); video.srcObject = null; video.style.display = 'none'; }
-}
-function chupAnh() {
-  var err = document.getElementById('camErr');
-  err.textContent = '';
-  var video = document.getElementById('cam');
-  if (!camStream || !video.videoWidth) {
-    err.textContent = 'Bạn bấm Mở camera trước, rồi mới bấm Chụp.';
-    return;
-  }
-  var max = 800, w = video.videoWidth, h = video.videoHeight;
-  if (w > max || h > max) {
-    var r = Math.min(max / w, max / h);
-    w = Math.round(w * r); h = Math.round(h * r);
-  }
-  var cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  cv.getContext('2d').drawImage(video, 0, 0, w, h);
-  var url = cv.toDataURL('image/jpeg', 0.6);
-  photoB64 = url.split(',')[1];
-  var pv = document.getElementById('preview');
-  pv.src = url; pv.style.display = 'block';
-  tatCamera();
-  document.getElementById('camSnap').disabled = true;
-  document.getElementById('msg').className = 'ok';
-  document.getElementById('msg').textContent = '✅ Đã chụp xong. Bạn bấm nút xác nhận nhé.';
-  checkReady();
+// Chụp ảnh: ô chọn tệp đã ẩn, chỉ còn nút bấm mở camera chụp ngay.
+// capture="user" trên iPhone/Android mở thẳng camera, không qua thư viện ảnh cũ.
+function xuLyAnhChup(f) {
+  if (!f) return;
+  var img = new Image();
+  img.onerror = function () {
+    document.getElementById('msg').className = 'err';
+    document.getElementById('msg').textContent = 'Ảnh lỗi, bạn chụp lại giúp mình.';
+  };
+  img.onload = function () {
+    var max = 800, w = img.width, h = img.height;
+    if (w > max || h > max) {
+      var r = Math.min(max / w, max / h);
+      w = Math.round(w * r); h = Math.round(h * r);
+    }
+    var cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    cv.getContext('2d').drawImage(img, 0, 0, w, h);
+    var url = cv.toDataURL('image/jpeg', 0.6);
+    photoB64 = url.split(',')[1];
+    URL.revokeObjectURL(img.src);
+    var pv = document.getElementById('preview');
+    pv.src = url; pv.style.display = 'block';
+    document.getElementById('photoBtn').textContent = '📷 Chụp lại nếu ảnh mờ';
+    checkReady();
+  };
+  img.src = URL.createObjectURL(f);
 }
 
 function layGPS() {
@@ -288,10 +260,7 @@ function guiCheckin() {
         (r.type === 'IN' && r.lateMin > 0 ? '<br>⏰ Trễ: ' + r.lateMin + ' phút' : '') +
         (r.canhBao ? '<br><br>😄 ' + r.canhBao : '');
       document.getElementById('btn').style.display = 'none';
-      // Khóa camera để chống spam tiếp
-      tatCamera();
-      document.getElementById('camSnap').disabled = true;
-      document.getElementById('camRetake').disabled = true;
+      document.getElementById('photoBtn').disabled = true;
     } else if (r.needAutoOut) {
       clearTimeout(timeoutId);
       btn.disabled = false;
