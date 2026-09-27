@@ -174,6 +174,11 @@ function submitCheckin(p) {
   if (!p.photo) return { ok: false, msg: 'Vui lòng chụp ảnh khuôn mặt.' };
   if (!p.type || (p.type !== 'IN' && p.type !== 'OUT')) return { ok: false, msg: 'Vui lòng chọn VÀO hoặc RA.' };
 
+  // Giờ chấm = giờ bấm nút (submitTs do web gửi), KHÔNG dùng giờ mở trang.
+  // Chống gian lận mở web ở nhà rồi tới nơi mới bấm.
+  var nowTs = p.submitTs || new Date().getTime();
+  var gioCham = new Date(nowTs);
+
   var dist = haversine(p.lat, p.lng, CENTER_LAT, CENTER_LNG);
   var distM = Math.round(dist);
   if (dist > RADIUS_M) {
@@ -183,7 +188,7 @@ function submitCheckin(p) {
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName('CHECK IN');
-  var todayStr = fmtD(new Date(p.openTs || new Date().getTime()));
+  var todayStr = fmtD(gioCham);
 
   // CHẶN SPAM: cùng 1 người + 1 ngày + 1 ca chỉ được 1 lần (IN hoặc VẮNG)
   // Nới rộng điều kiện trong đoạn cũ — không thêm vòng lặp mới.
@@ -234,7 +239,7 @@ function submitCheckin(p) {
   // Xử lý auto OUT
   if (p.autoOutDone && p.autoOutData) {
     var a = p.autoOutData;
-    var ngayStr = fmtD(new Date(p.openTs));
+    var ngayStr = fmtD(gioCham);
     // Thứ tự cột mới: Mã, Tên, Ngày, Ca, Loại, Giờ in, Giờ out, Trễ, Ghi chú, Ảnh, Khoảng cách, Thiết bị
     sh.appendRow([p.ma, a.ten, ngayStr, a.ca, 'OUT', '', a.outTime, 0, '⚠️ Quên check out (Hệ thống tự OUT)', '', '', p.device || '']);
   }
@@ -243,8 +248,8 @@ function submitCheckin(p) {
 
   var lateMin = 0;
   if (p.type === 'IN' && p.caBd) {
-    var chuan = chuanTime(p.caBd, p.openTs);
-    lateMin = Math.max(0, Math.round((p.openTs - chuan) / 60000));
+    var chuan = chuanTime(p.caBd, nowTs);
+    lateMin = Math.max(0, Math.round((nowTs - chuan) / 60000));
   }
 
   // 1 máy chấm cho 2 người cùng ngày = cheat: vẫn cho qua, nhưng ghi rõ vào Ghi chú.
@@ -252,19 +257,19 @@ function submitCheckin(p) {
 
   var folder = getFolder();
   var ext = 'jpg';
-  var fname = p.ma + '_' + fmtFile(new Date(p.openTs)) + '_' + p.type + '.' + ext;
+  var fname = p.ma + '_' + fmtFile(gioCham) + '_' + p.type + '.' + ext;
   var blob = Utilities.newBlob(Utilities.base64Decode(p.photo), 'image/jpeg', fname);
   var file = folder.createFile(blob);
 
   // Thứ tự cột mới: Mã, Tên, Ngày, Ca, Loại IN/OUT, Giờ check in, Giờ check out, Trễ, Ghi chú, Link ảnh, Khoảng cách, Thiết bị
-  var ngayStr = fmtD(new Date(p.openTs));
-  var checkInTime = p.type === 'IN' ? cellHM(new Date(p.openTs)) : '';
-  var checkOutTime = p.type === 'OUT' ? cellHM(new Date(p.openTs)) : '';
+  var ngayStr = fmtD(gioCham);
+  var checkInTime = p.type === 'IN' ? cellHM(gioCham) : '';
+  var checkOutTime = p.type === 'OUT' ? cellHM(gioCham) : '';
   var noteFull = [note, canhBaoChungMay.ghiChu].filter(function (x) { return x; }).join(' | ');
   
   sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel || '', p.type, checkInTime, checkOutTime, lateMin, noteFull, file.getUrl(), distM, p.device || '']);
 
-  return { ok: true, time: p.openText, distance: distM, lateMin: lateMin, type: p.type,
+  return { ok: true, time: fmtDT(gioCham), distance: distM, lateMin: lateMin, type: p.type,
     canhBao: canhBaoChungMay.popup, chungMay: canhBaoChungMay.chungMay };
 }
 
@@ -793,11 +798,15 @@ function submitBaoVang(p) {
   if (!p.ma || !p.ten) return { ok: false, msg: 'Vui lòng chọn mã và tên nhân viên.' };
   if (!p.caLabel) return { ok: false, msg: 'Vui lòng chọn ca cần báo vắng.' };
 
+  // Giờ báo = giờ bấm nút VẮNG, giống check-in (không dùng giờ mở trang).
+  var nowTs = p.submitTs || p.openTs || new Date().getTime();
+  var gioBao = new Date(nowTs);
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName('CHECK IN');
   if (!sh) return { ok: false, msg: 'Sheet CHECK IN không tồn tại. Vui lòng chạy setup() trước.' };
 
-  var ngayStr = fmtD(new Date(p.openTs || new Date().getTime()));
+  var ngayStr = fmtD(gioBao);
 
   // CHẶN TRÙNG: tái dùng đúng luật của check-in — 1 người + 1 ngày + 1 ca chỉ 1 dòng.
   // Nếu đã có IN hoặc VẮNG cùng ca thì từ chối, không ghi thêm.
@@ -817,11 +826,11 @@ function submitBaoVang(p) {
   // đúng giờ/sớm = trễ 0, muộn = ghi số phút trễ như check-in thường.
   var treVang = 0;
   if (p.caBd) {
-    var chuan = chuanTime(p.caBd, p.openTs || new Date().getTime());
-    treVang = Math.max(0, Math.round(((p.openTs || new Date().getTime()) - chuan) / 60000));
+    var chuan = chuanTime(p.caBd, nowTs);
+    treVang = Math.max(0, Math.round((nowTs - chuan) / 60000));
   }
 
-  var ghiChu = (p.lyDo || 'Phụ huynh xin nghỉ') + ' (Báo vắng từ xa: ' + fmtDT(new Date(p.openTs || new Date().getTime())) + ')';
+  var ghiChu = (p.lyDo || 'Phụ huynh xin nghỉ') + ' (Báo vắng từ xa: ' + fmtDT(gioBao) + ')';
 
   // Thứ tự cột: Mã, Tên, Ngày, Ca, Loại, Giờ in, Giờ out, Trễ, Ghi chú, Ảnh, Khoảng cách
   sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel, 'VẮNG', '', '', treVang, ghiChu, '', '']);

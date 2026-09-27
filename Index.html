@@ -251,6 +251,7 @@ function guiCheckin() {
   var pad = function (n) { return (n < 10 ? '0' : '') + n; };
   var submitText = pad(now.getDate()) + '/' + pad(now.getMonth() + 1) + '/' +
     now.getFullYear() + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  var submitTs = now.getTime();
   google.script.run.withSuccessHandler(function (r) {
     clearTimeout(timeoutId);
     if (r.ok) {
@@ -286,7 +287,7 @@ function guiCheckin() {
     ma: document.getElementById('ma').value,
     ten: document.getElementById('ten').value,
     lat: lat, lng: lng, photo: photoB64, type: loai,
-    openTs: openTs, openText: openText, submitText: submitText,
+    openTs: openTs, openText: openText, submitText: submitText, submitTs: submitTs,
     caBd: caBd, caLabel: caLabel, autoOutDone: autoOutDone, autoOutData: autoOutData,
     device: deviceLabel
   }).withFailureHandler(function (e) {
@@ -320,7 +321,7 @@ function guiBaoVang() {
   }).submitBaoVang({
     ma: document.getElementById('ma').value,
     ten: document.getElementById('ten').value,
-    openTs: openTs, caBd: caBd, caLabel: caLabel,
+    openTs: openTs, submitTs: new Date().getTime(), caBd: caBd, caLabel: caLabel,
     lyDo: document.getElementById('lydo').value
   }).withFailureHandler(function (e) {
     m.className = 'err';
