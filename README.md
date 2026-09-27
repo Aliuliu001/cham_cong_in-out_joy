@@ -25,7 +25,7 @@ Nền tảng: Google Apps Script + Google Sheets + Google Drive.
 ## Luật đã chốt
 
 - Tọa độ trung tâm 11.937044, 108.444760 — bán kính 100m. Ngoài → không lưu, hiện số mét. (Riêng nút VẮNG bấm ở nhà được, không kiểm tra vị trí/ảnh.)
-- Giờ chính = giờ mở trang (giờ máy chủ). Nhân viên không tự nhập ngày → chống chấm bù ngày cũ.
+- Giờ chấm = giờ bấm nút xác nhận (IN/OUT/VẮNG). Vị trí cũng lấy mới lúc bấm nút — mở web ở nhà rồi tới nơi mới bấm vẫn tính đúng giờ + vị trí lúc bấm.
 - Bắt buộc với VÀO/RA: mã (chọn từ danh sách) + GPS + ảnh mặt + giờ server. Ảnh nén nhỏ, giữ nguyên hướng, không lật.
 - Trễ = giờ bấm nút trừ thẳng giờ bắt đầu ca trong LICHLAM. Bạn tự ghi giờ ca — ví dụ ca ghi 8:00 thì bấm 8:01 = trễ 1 phút.
 - 1 người + 1 ngày + 1 ca chỉ được 1 dòng (đã VÀO thì không VẮNG được nữa, đã VẮNG thì không VÀO/VẮNG lại được, VÀO 2 lần bị chặn).

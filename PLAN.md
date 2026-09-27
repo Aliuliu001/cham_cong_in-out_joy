@@ -5,7 +5,7 @@
 - KHÔNG tạo thêm Sheet riêng cho từng tính năng (đã bỏ BAO_VANG).
 - Cột "Loại IN/OUT" chỉ có 3 giá trị: IN / OUT / VẮNG.
 - Giờ trễ = giờ bấm nút trừ thẳng giờ bắt đầu ca trong LICHLAM (không trừ sớm 15'/30' — user tự ghi giờ ca).
-- Ngày/giờ lấy theo giờ mở trang (giờ máy chủ), nhân viên không tự nhập ngày → chống chấm bù ngày cũ.
+- Giờ chấm = giờ bấm nút (IN/OUT/VẮNG), KHÔNG dùng giờ mở trang. Vị trí cũng lấy mới lúc bấm nút.
 - Vắng (có phép hay không báo) đều = 0 giờ làm.
 - Vắng không báo + VẮNG bấm muộn đều tính như 1 lần trễ để trừ KPI.
 - Ca thiếu chỉ hiện trên báo cáo + Lỗi tháng, KHÔNG tự ghi thêm dòng vào Sheet. Muốn duyệt phép bù thì quản lý ghi tay dòng VẮNG + chữ DUYỆT BÙ ở Ghi chú.
