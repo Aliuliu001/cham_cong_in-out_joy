@@ -237,6 +237,26 @@ document.getElementById('btn').onclick = function () {
 function guiCheckin() {
   var m = document.getElementById('msg');
   var btn = document.getElementById('btn');
+  m.className = ''; m.textContent = 'Đang lấy vị trí mới... (đứng yên 3 giây)';
+  btn.disabled = true;
+  // Lấy GPS tươi tại thời điểm bấm nút — không dùng vị trí lúc mở trang.
+  if (!navigator.geolocation) {
+    guiCheckinGui();
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(function (p) {
+    lat = p.coords.latitude; lng = p.coords.longitude; acc = Math.round(p.coords.accuracy || 0);
+    document.getElementById('gps').textContent = 'Đã xác định (±' + acc + 'm)';
+    guiCheckinGui();
+  }, function () {
+    // Không lấy được vị trí mới: cứ gửi vị trí cũ, máy chủ sẽ báo rõ.
+    guiCheckinGui();
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+}
+
+function guiCheckinGui() {
+  var m = document.getElementById('msg');
+  var btn = document.getElementById('btn');
   m.className = ''; m.textContent = 'Đang gửi... (tầm 10-20 giây, đừng tắt trang)';
   btn.disabled = true;
   // Tự báo nếu quá 45 giây chưa xong (thường do mạng yếu)
