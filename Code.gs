@@ -20,13 +20,15 @@ var TELEGRAM_THREAD_ID = '665'; // topic Check IN/OUT trong nhóm joy_office
 function guiTinTelegram(text) {
   try {
     var token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN') || '';
-    if (!token) return;
-    UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+    if (!token) { Logger.log('THIEU TOKEN: chua nhap TELEGRAM_BOT_TOKEN'); return 'THIEU TOKEN'; }
+    var resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
       method: 'post',
       payload: { chat_id: TELEGRAM_CHAT_ID, message_thread_id: TELEGRAM_THREAD_ID, text: text },
       muteHttpExceptions: true
     });
-  } catch (e) { /* gửi tin lỗi cũng không chặn chấm công */ }
+    Logger.log('GUI TIN: ' + resp.getContentText());
+    return resp.getContentText();
+  } catch (e) { Logger.log('LOI GUI TIN: ' + e.message); return 'LOI: ' + e.message; }
 }
 
 function guiAnhTelegram(photoB64, caption) {
@@ -42,6 +44,12 @@ function guiAnhTelegram(photoB64, caption) {
       muteHttpExceptions: true
     });
   } catch (e) { guiTinTelegram(caption); }
+}
+
+/* Test gửi tin: chạy hàm này 1 lần, xem Nhật ký là biết lỗi ở đâu.
+   Chạy xong nhớ Triển khai > Phiên bản mới lại. */
+function testGuiTin() {
+  return guiTinTelegram('🤖 Test từ Apps Script: ' + new Date());
 }
 
 /* ---------- Web ---------- */
