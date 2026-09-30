@@ -10,6 +10,40 @@ var RADIUS_M = 100;
 var DRIVE_FOLDER = 'CHECK IN - ANH NHAN VIEN';
 var TZ = 'Asia/Ho_Chi_Minh';
 
+/* ---------- Báo tin Telegram (topic Check IN/OUT) ---------- */
+// Chìa khóa bot KHÔNG nằm trong code này.
+// Bạn dán chìa khóa vào: Apps Script > Cài đặt dự án > Thuộc tính tập lệnh (Script Properties)
+// Thêm 1 dòng: Tên = TELEGRAM_BOT_TOKEN, Giá trị = dãy chữ của bot phụ.
+var TELEGRAM_CHAT_ID = '-1003955550981';
+var TELEGRAM_THREAD_ID = '665'; // topic Check IN/OUT trong nhóm joy_office
+
+function guiTinTelegram(text) {
+  try {
+    var token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN') || '';
+    if (!token) return;
+    UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+      method: 'post',
+      payload: { chat_id: TELEGRAM_CHAT_ID, message_thread_id: TELEGRAM_THREAD_ID, text: text },
+      muteHttpExceptions: true
+    });
+  } catch (e) { /* gửi tin lỗi cũng không chặn chấm công */ }
+}
+
+function guiAnhTelegram(photoB64, caption) {
+  try {
+    var token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN') || '';
+    if (!token) return;
+    if (!photoB64) { guiTinTelegram(caption); return; }
+    var blob = Utilities.newBlob(Utilities.base64Decode(photoB64), 'image/jpeg', 'checkin.jpg');
+    UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendPhoto', {
+      method: 'post',
+      payload: { chat_id: TELEGRAM_CHAT_ID, message_thread_id: TELEGRAM_THREAD_ID,
+        caption: caption, photo: blob },
+      muteHttpExceptions: true
+    });
+  } catch (e) { guiTinTelegram(caption); }
+}
+
 /* ---------- Web ---------- */
 
 function doGet(e) {
@@ -268,6 +302,14 @@ function submitCheckin(p) {
   var noteFull = [note, canhBaoChungMay.ghiChu].filter(function (x) { return x; }).join(' | ');
   
   sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel || '', p.type, checkInTime, checkOutTime, lateMin, noteFull, file.getUrl(), distM, p.device || '']);
+
+  // Báo tin vào topic Check IN/OUT (kèm ảnh). Gửi lỗi cũng không chặn chấm công.
+  var chu = p.type === 'IN' ? 'VÀO' : 'RA';
+  var tin = '🟢 ' + cellHM(gioCham) + ' — ' + p.ten + ' (' + p.ma + ') ' + chu +
+    ' ca ' + (p.caLabel || '?') +
+    (p.type === 'IN' && lateMin > 0 ? ', trễ ' + lateMin + 'p' : '') +
+    (p.type === 'IN' && !lateMin ? ', đúng giờ' : '');
+  guiAnhTelegram(p.type === 'IN' ? p.photo : '', tin);
 
   return { ok: true, time: fmtDT(gioCham), distance: distM, lateMin: lateMin, type: p.type,
     canhBao: canhBaoChungMay.popup, chungMay: canhBaoChungMay.chungMay };
@@ -834,6 +876,11 @@ function submitBaoVang(p) {
 
   // Thứ tự cột: Mã, Tên, Ngày, Ca, Loại, Giờ in, Giờ out, Trễ, Ghi chú, Ảnh, Khoảng cách
   sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel, 'VẮNG', '', '', treVang, ghiChu, '', '']);
+
+  // Báo tin VẮNG vào topic Check IN/OUT (không có ảnh vì bấm ở nhà).
+  guiTinTelegram('🟡 ' + cellHM(gioBao) + ' — ' + p.ten + ' (' + p.ma + ') VẮNG ca ' +
+    p.caLabel + ' (' + (p.lyDo || 'Phụ huynh xin nghỉ') + ')' +
+    (treVang > 0 ? ', báo trễ ' + treVang + 'p' : ''));
 
   var msg = 'Đã ghi nhận báo vắng ca [' + p.caLabel + '] thành công!';
   if (treVang > 0) msg += ' (Báo trễ ' + treVang + ' phút)';
