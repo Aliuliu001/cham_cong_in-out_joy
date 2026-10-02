@@ -187,6 +187,16 @@ function cellMY(x) { // 'MM/yyyy'
   if (x instanceof Date) return Utilities.formatDate(x, TZ, 'MM/yyyy');
   return String(x || '').substring(3, 10);
 }
+// B4: đọc Ngày chịu được cả Date gốc lẫn chữ hiển thị.
+// Dùng kèm getValues() (lấy Date gốc) thì đổi định dạng cột Ngày cũng không rớt dòng.
+function ngayCuaO(cell) {
+  if (cell instanceof Date && !isNaN(cell)) return Utilities.formatDate(cell, TZ, 'dd/MM/yyyy');
+  return cellDay(cell);
+}
+function thangCuaO(cell) {
+  if (cell instanceof Date && !isNaN(cell)) return Utilities.formatDate(cell, TZ, 'MM/yyyy');
+  return cellMY(cell);
+}
 function cellDT(x) { // 'dd/MM/yyyy HH:mm:ss'
   if (x instanceof Date) return Utilities.formatDate(x, TZ, 'dd/MM/yyyy HH:mm:ss');
   return String(x || '');
@@ -497,13 +507,14 @@ function getBaoCaoThang(ma, thangStr) {
     soLanQuenIN: 0, soLanQuenRA: 0, soVangCoPhep: 0, soVangKhongBao: 0, vangKhongBaoChiTiet: [], kpi: 100, chiTiet: [] };
   if (!sh || sh.getLastRow() < 2) return res;
   var v = sh.getDataRange().getDisplayValues();
+  var vRaw = sh.getDataRange().getValues(); // B4: cột Ngày lấy Date gốc
   var rows = [];
   // Cột mới: 0:Mã, 1:Tên, 2:Ngày, 3:Ca, 4:Loại, 5:Giờ in, 6:Giờ out, 7:Trễ, 8:Ghi chú
   for (var i = 1; i < v.length; i++) {
     if (!v[i][0]) continue;
     if (String(v[i][0]).trim() !== ma) continue;
-    var day = cellDay(v[i][2]);
-    var month = cellMY(v[i][2]);
+    var day = ngayCuaO(vRaw[i][2]);
+    var month = thangCuaO(vRaw[i][2]);
     if (month !== thangStr) continue;
     var gio = v[i][5] || v[i][6];
     rows.push({ ngay: day, gio: String(gio), type: String(v[i][4]), ca: String(v[i][3]),
@@ -546,6 +557,9 @@ function getBaoCaoThang(ma, thangStr) {
         res.tongGio += h;
         res.chiTiet.push({ ngay: d, ca: openIn.ca, gio: h });
         openIn = null;
+      } else if (r.type === 'OUT' && !openIn) {
+        // B7: tin RA mà trước đó không có giờ VÀO -> tính là quên giờ VÀO
+        res.soLanQuenIN++;
       }
     });
     if (openIn) res.soLanQuenRA++;
@@ -656,10 +670,17 @@ function gioLam(inR, outR, ngayStr) {
   if (!inR.bd || !inR.kt) return 0;
   var bdTs = parseVN(ngayStr + ' ' + inR.bd);
   var ktTs = parseVN(ngayStr + ' ' + inR.kt);
-  var outTs = parseVN(outR.gio);
+  var outTs = parseVN(ngayStr + ' ' + outR.gio);
   if (!bdTs || !ktTs || !outTs) return 0;
   var end = Math.min(outTs, ktTs);
   return Math.max(0, (end - bdTs) / 3600000);
+}
+
+function testGioLam() {
+  var h = gioLam({ bd: '08:00', kt: '11:00' }, { gio: '11:00' }, '01/10/2026');
+  Logger.log('gioLam = ' + h + ' (ky vong 3)');
+  var h2 = gioLam({ bd: '08:00', kt: '11:00' }, { gio: '10:00' }, '01/10/2026');
+  Logger.log('gioLam som = ' + h2 + ' (ky vong 2)');
 }
 
 /* ---------- Helpers ---------- */
@@ -738,19 +759,20 @@ function xuatBaoCaoSheet(thangStr) {
   var errRows = [];
   if (shCheck && shCheck.getLastRow() >= 2) {
     var v = shCheck.getDataRange().getDisplayValues();
+    var vN = shCheck.getDataRange().getValues(); // B4: cột Ngày lấy Date gốc
     for (var i = 1; i < v.length; i++) {
       if (!v[i][0]) continue;
-      var ngay = cellDay(v[i][2]);
-      var month = cellMY(v[i][2]);
+      var ngay = ngayCuaO(vN[i][2]);
+      var month = thangCuaO(vN[i][2]);
       if (month !== thangStr) continue;
-      
+
       var ma = String(v[i][0]);
       var ten = String(v[i][1]);
       var ca = String(v[i][3]);
       var loai = String(v[i][4]);
       var tre = Number(v[i][7] || 0);
       var note = String(v[i][8]);
-      
+
       // Kiểm tra lỗi:
       // 1. Trễ IN (>0 phút)
       if (loai === 'IN' && tre > 0) {
@@ -760,10 +782,7 @@ function xuatBaoCaoSheet(thangStr) {
       if (loai === 'VẮNG' && tre > 0) {
         errRows.push([ngay, ma, ten, ca, 'Đi làm trễ (báo vắng muộn)', tre + 'p', note]);
       }
-      // 1c. VẮNG đúng giờ — chỉ ghi nhận, không trừ KPI
-      if (loai === 'VẮNG' && !(tre > 0)) {
-        errRows.push([ngay, ma, ten, ca, 'Vắng có phép', '', note]);
-      }
+      // B6: VẮNG đúng giờ chỉ nằm ở bảng tổng hợp, KHÔNG ghi vào bảng lỗi.
       // 2. Quên OUT / Hệ thống tự OUT
       if (note.indexOf('Quên check out') !== -1 || note.indexOf('tự OUT') !== -1) {
         errRows.push([ngay, ma, ten, ca, 'Quên check out', '', note]);
@@ -771,6 +790,17 @@ function xuatBaoCaoSheet(thangStr) {
       // 2b. 1 máy chấm cho 2 người cùng ngày
       if (note.indexOf('1 máy chấm cho 2 người') !== -1) {
         errRows.push([ngay, ma, ten, ca, '1 máy – 2 người', '', note]);
+      }
+      // B7: tin RA mà không có giờ VÀO trước đó (tìm trong cùng ngày + ca)
+      if (loai === 'OUT') {
+        var coIn = false;
+        for (var k = 1; k < v.length; k++) {
+          if (k !== i && v[k][0] && String(v[k][0]).trim() === ma.trim() &&
+              ngayCuaO(vN[k][2]) === ngay && String(v[k][3]) === ca && String(v[k][4]) === 'IN') {
+            coIn = true; break;
+          }
+        }
+        if (!coIn) errRows.push([ngay, ma, ten, ca, 'Quên check in (RA không có VÀO)', '', note]);
       }
     }
   }
@@ -783,6 +813,13 @@ function xuatBaoCaoSheet(thangStr) {
       errRows.push([x.ngay, n.ma, n.ten, x.ca, 'Vắng không báo', '', '']);
     });
   });
+  // B6: xếp bảng lỗi theo ngày cho dễ đọc
+  errRows.sort(function (a, b) {
+    var pa = String(a[0]).split('/'), pb = String(b[0]).split('/');
+    var ta = new Date(pa[2], pa[1] - 1, pa[0]).getTime();
+    var tb = new Date(pb[2], pb[1] - 1, pb[0]).getTime();
+    return ta - tb;
+  });
   if (errRows.length > 0) {
     shErr.getRange(3, 1, errRows.length, errRows[0].length).setValues(errRows);
   }
@@ -791,16 +828,59 @@ function xuatBaoCaoSheet(thangStr) {
   return { ok: true, msg: 'Đã xuất thành công 2 sheet: ' + sheetName + ' và ' + errSheetName };
 }
 
-// Hàm chạy tự động ngày 1 hàng tháng
+// Hàm chạy tự động ngày 1 hàng tháng (+ tự chạy bù ngày 2-5 nếu trượt ngày 1)
 function autoBackupThangTruoc() {
   var d = new Date();
-  // Nếu là ngày 1, backup tháng trước
   if (d.getDate() === 1) {
     var prev = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    backupMotThang(prev);
+    return;
+  }
+  // B3: ngày 2-5: kiểm tra 3 tháng gần nhất, tháng nào còn sót (CHECK IN còn
+  // dữ liệu mà chưa có sheet backup) thì chốt bù.
+  if (d.getDate() >= 2 && d.getDate() <= 5) {
+    backupBuThangSot();
+  }
+}
+
+// Quét 3 tháng gần nhất, chốt bù tháng còn sót.
+function backupBuThangSot() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var shCheck = ss.getSheetByName('CHECK IN');
+  if (!shCheck || shCheck.getLastRow() < 2) return;
+  var v = shCheck.getDataRange().getDisplayValues();
+  var thangConSot = {};
+  for (var i = 1; i < v.length; i++) {
+    if (!v[i][0]) continue;
+    var m = cellMY(v[i][2]); // MM/yyyy
+    if (/^\d\d\/\d{4}$/.test(m)) thangConSot[m] = true;
+  }
+  var homNayMM = Utilities.formatDate(new Date(), TZ, 'MM/yyyy');
+  Object.keys(thangConSot).forEach(function (thangStr) {
+    if (thangStr === homNayMM) return; // tháng hiện tại chưa chốt
+    var p = thangStr.split('/');
+    var prev = new Date(Number(p[1]), Number(p[0]) - 1, 1);
+    var thangFile = Utilities.formatDate(prev, TZ, 'MM-yyyy');
+    if (!ss.getSheetByName('CHECK IN - Tháng ' + thangFile)) {
+      Logger.log('Chay bu thang sot: ' + thangStr);
+      backupMotThang(prev);
+    }
+  });
+}
+
+// Chốt 1 tháng: copy CHECK IN -> xuất báo cáo -> xóa dữ liệu.
+// Có cờ bảo vệ: tháng nào đã chốt rồi thì thoát ngay, không làm lại.
+function backupMotThang(prev) {
     var thangStr = Utilities.formatDate(prev, TZ, 'MM/yyyy');
     var thangFile = Utilities.formatDate(prev, TZ, 'MM-yyyy');
-    
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // B2: đã có sheet backup tháng này = đã chốt rồi -> thoát ngay.
+    if (ss.getSheetByName('CHECK IN - Tháng ' + thangFile)) {
+      Logger.log('Da chot thang ' + thangStr + ' roi, bo qua.');
+      return { ok: false, msg: 'Đã chốt tháng ' + thangStr + ' rồi, bỏ qua.' };
+    }
     
     // 1. Duplicate sheet CHECK IN
     var shCheck = ss.getSheetByName('CHECK IN');
@@ -815,12 +895,16 @@ function autoBackupThangTruoc() {
     
     // 2. Xuất báo cáo tháng trước
     xuatBaoCaoSheet(thangStr);
-    
+
     // 3. Xóa dữ liệu cũ trong sheet CHECK IN (giữ lại header)
     if (shCheck && shCheck.getLastRow() > 1) {
       shCheck.getRange(2, 1, shCheck.getLastRow() - 1, shCheck.getLastColumn()).clearContent();
     }
-  }
+
+    // B6b: báo tin vào topic Check IN/OUT khi chốt tháng xong
+    Logger.log('Da chot thang ' + thangStr + ' xong.');
+    guiTinTelegram('📦 Đã chốt tháng ' + thangStr + ' xong (lưu bản copy + xuất báo cáo).');
+    return { ok: true, msg: 'Đã chốt tháng ' + thangStr + ' xong.' };
 }
 
 // Đăng ký trigger chạy lúc 00:30 hàng ngày
