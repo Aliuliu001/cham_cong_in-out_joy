@@ -75,10 +75,6 @@ function setup() {
   ensureTab(ss, 'DANHSACH', ['Mã NV', 'Họ tên', 'Vai trò (Giáo viên/Văn phòng)']);
   ensureTab(ss, 'LICHLAM', ['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
   ensureTab(ss, 'BAOCAO_THANG', ['Mã NV', 'Họ tên', 'Tổng giờ', 'Giờ tăng cường', 'Số ca', 'Số lần trễ', 'Số lần quên IN', 'Số lần quên OUT', 'KPI (%)']);
-  ensureTab(ss, 'GIA_LUONG', ['Loại', 'Mã', 'Giá trị', 'Ghi chú']);
-  seedGiaLuong(ss); // chỉ ghi khi sheet còn trống, có dữ liệu rồi thì không đụng
-  ensureTab(ss, 'LUONG_TAY', ['Tháng', 'Mã NV', 'Họ tên', 'Số lớp chính', 'Số buổi dạy (part)', 'Ngày công chuẩn', 'Phép', 'Nghỉ không lương', 'Điểm %', 'Tiền VP', 'Giờ VP', 'Ghi chú']);
-  ensureTab(ss, 'LUONG_KEM', ['Tháng', 'Mã NV', 'Lớp', 'Số buổi', 'Số giờ', 'Đơn giá', 'Thành tiền', 'Ghi chú']);
   // Sheet đã có từ trước thì thêm cột mới vào cuối header nếu còn thiếu
   themCotNeuThieu(ss, 'CHECK IN', 12, 'Thiết bị');
 }
@@ -93,86 +89,6 @@ function ensureTab(ss, name, headers) {
   var sh = ss.getSheetByName(name);
   if (!sh) { sh = ss.insertSheet(name); }
   if (sh.getLastRow() === 0) { sh.appendRow(headers); sh.setFrozenRows(1); }
-}
-
-/* ---------- Bảng giá lương (ghi 1 lần, dùng cả năm) ---------- */
-// Chỉ ghi khi sheet còn trống (mới có header). Đã có dữ liệu thì không đụng.
-function seedGiaLuong(ss) {
-  var sh = ss.getSheetByName('GIA_LUONG');
-  if (!sh || sh.getLastRow() > 1) return;
-  var rows = [
-    ['BAC', 'HOCVIEC', 80000, 'Học việc: 80k/buổi'],
-    ['BAC', '1', 100000, 'Bậc 1'],
-    ['BAC', '2', 120000, 'Bậc 2'],
-    ['BAC', '3', 150000, 'Bậc 3'],
-    ['BAC', '4', 180000, 'Bậc 4'],
-    ['BAC', '5', 200000, 'Bậc 5'],
-    ['BAC', '6', 220000, 'Bậc 6'],
-    ['BAC', '7', 250000, 'Bậc 7'],
-    ['CHE_DO', 'NV0101', 'Fulltime', 'Tuấn Ngọc'],
-    ['CHE_DO', 'NV2301', 'Fulltime', 'Uyên Vi'],
-    ['CHE_DO', 'NV0204', 'Fulltime', 'Vân Anh (HCNS)'],
-    ['CHE_DO', 'NV2707', 'Fulltime', 'Đức Anh'],
-    ['CHE_DO', 'NV0904', 'Fulltime', 'Khánh Vân'],
-    ['CHE_DO', 'NV1308', 'Fulltime', 'Hồng Anh (làm hết 10/2026)'],
-    ['CHE_DO', 'NV2412', 'Part - time', 'Bảo Trâm'],
-    ['CHE_DO', 'NV2503', 'Part - time', 'Hạnh Nhung'],
-    ['CHE_DO', 'NV0801', 'Part - time', 'Chí Khôi'],
-    ['BAC_NV', 'NV0101', 5, 'Tuấn Ngọc bậc 5'],
-    ['BAC_NV', 'NV2301', 5, 'Uyên Vi bậc 5'],
-    ['BAC_NV', 'NV2707', 5, 'Đức Anh bậc 5'],
-    ['BAC_NV', 'NV1308', 5, 'Hồng Anh bậc 5'],
-    ['BAC_NV', 'NV0904', 6, 'Khánh Vân bậc 6'],
-    ['BAC_NV', 'NV2412', 3, 'Bảo Trâm bậc 3'],
-    ['BAC_NV', 'NV2503', 2, 'Hạnh Nhung bậc 2'],
-    ['KIEM_NHIEM', 'NV0101', 5000000, 'Tuấn Ngọc'],
-    ['KIEM_NHIEM', 'NV2301', 5000000, 'Uyên Vi'],
-    ['VP_GIO', 'NV2503', 42000, 'Giá giờ văn phòng của Nhung'],
-    ['BHXH_MUC', 'MAC_DINH', 5100000, 'Mức đóng mặc định'],
-    ['BHXH_MUC', 'NV2301', 10000000, 'Uyên Vi đóng trên 10tr'],
-    ['TY_LE', 'BHXH', 0.105, 'Trừ 10.5%'],
-    ['TY_LE', 'CUNG', 0.7, '70% lương cứng'],
-    ['TY_LE', 'THUONG', 0.3, '30% thưởng'],
-    ['MOC_THUONG', '85', 1, '>=85% hưởng 100%'],
-    ['MOC_THUONG', '70', 0.75, '70-84% hưởng 75%'],
-    ['MOC_THUONG', '50', 0.5, '50-69% hưởng 50%'],
-    ['NGHI_TU', 'NV1308', '11/2026', 'Hồng Anh nghỉ từ tháng 11/2026'],
-    ['NGAY_CHUAN', '09/2026', 26, 'Tháng 9: 26 ngày (nghỉ T3)'],
-    ['NGAY_CHUAN', '10/2026', 27, 'Tháng 10: 27 ngày (4 ngày T3)']
-  ];
-  sh.getRange(2, 1, rows.length, 4).setValues(rows);
-}
-
-// Đọc bảng giá về dạng object dùng chung cho tính lương.
-function giaLuong() {
-  var g = { bac: {}, cheDo: {}, bacNV: {}, kiemNhiem: {}, bhxhMuc: {}, mocThuong: [], ngayChuan: {} };
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('GIA_LUONG');
-  if (!sh || sh.getLastRow() < 2) return g;
-  var v = sh.getDataRange().getValues();
-  for (var i = 1; i < v.length; i++) {
-    var loai = String(v[i][0] || '').trim(), ma = String(v[i][1] || '').trim(), val = v[i][2];
-    if (!loai) continue;
-    if (loai === 'BAC') g.bac[ma === 'HOCVIEC' ? 0 : Number(ma)] = Number(val);
-    else if (loai === 'CHE_DO') g.cheDo[ma] = String(val);
-    else if (loai === 'BAC_NV') g.bacNV[ma] = Number(val);
-    else if (loai === 'KIEM_NHIEM') g.kiemNhiem[ma] = Number(val);
-    else if (loai === 'VP_GIO') g.vpGio = { ma: ma, gia: Number(val) };
-    else if (loai === 'BHXH_MUC') g.bhxhMuc[ma] = Number(val);
-    else if (loai === 'TY_LE') g.tyLe = g.tyLe || {}, g.tyLe[ma] = Number(val);
-    else if (loai === 'MOC_THUONG') g.mocThuong.push({ moc: Number(ma), tyLe: Number(val) });
-    else if (loai === 'NGHI_TU') g.nghiTu = g.nghiTu || {}, g.nghiTu[ma] = String(val);
-    else if (loai === 'NGAY_CHUAN') g.ngayChuan[ma] = Number(val);
-  }
-  g.mocThuong.sort(function (a, b) { return b.moc - a.moc; });
-  return g;
-}
-
-function testGiaLuong() {
-  var g = giaLuong();
-  Logger.log('Bac 5 = ' + g.bac[5] + ' (ky vong 200000)');
-  Logger.log('Che do NV2503 = ' + g.cheDo['NV2503'] + ' (ky vong Part - time)');
-  Logger.log('Kiem nhiem NV0101 = ' + g.kiemNhiem['NV0101'] + ' (ky vong 5000000)');
-  Logger.log('Ngay chuan 09/2026 = ' + g.ngayChuan['09/2026'] + ' (ky vong 26)');
 }
 
 /* ---------- Giờ server + danh sách ---------- */
@@ -193,25 +109,7 @@ function getNhanVienList() {
   return out;
 }
 
-// Tìm vị trí cột LICHLAM theo tên header (chịu được thêm/xóa cột).
-// Văn phòng thêm cột tính toán phía sau thì máy vẫn đọc đúng 6 cột gốc.
-function cotLichLam(header) {
-  var col = { ma: 0, thu: -1, ngay: 2, ca: 3, bd: 4, kt: 5 };
-  for (var c = 0; c < header.length; c++) {
-    var h = String(header[c] || '').toLowerCase().replace(/\s+/g, '');
-    if (h.indexOf('mã') === 0 || h.indexOf('ma') === 0) col.ma = c;
-    else if (h === 'thứ' || h === 'thu') col.thu = c;
-    else if (h.indexOf('ngày') === 0 || h.indexOf('ngay') === 0) col.ngay = c;
-    else if (h === 'ca') col.ca = c;
-    else if (h.indexOf('bắtđầu') >= 0 || h.indexOf('batdau') >= 0) col.bd = c;
-    else if (h.indexOf('kếtthúc') >= 0 || h.indexOf('ketthuc') >= 0) col.kt = c;
-  }
-  return col;
-}
-
 // Lịch của 1 nhân viên trong ngày hôm nay (theo cột Ngày T2..CN hoặc Cả ngày)
-// AUDIT 03/10: đọc theo TÊN CỘT (Mã, Ngày, Ca, Giờ BD, Giờ KT), không đọc theo
-// vị trí — văn phòng có thêm cột tính toán phía sau cũng không lệch.
 function getLichHomNay(ma) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('LICHLAM');
   if (!sh) return [];
@@ -219,16 +117,22 @@ function getLichHomNay(ma) {
   var v = sh.getDataRange().getDisplayValues();
   var out = [];
   if (v.length < 2) return out;
-  var col = cotLichLam(v[0]);
+  var ncols = v[0].length;
   for (var i = 1; i < v.length; i++) {
-    if (String(v[i][col.ma]).trim() !== ma) continue;
-    var ngayCell = col.ngay >= 0 ? String(v[i][col.ngay] || '').trim() : '';
-    var caCell = col.ca >= 0 ? String(v[i][col.ca] || '') : '';
-    var bd = col.bd >= 0 ? fmtTimeCell(v[i][col.bd]) : '';
-    var kt = col.kt >= 0 ? fmtTimeCell(v[i][col.kt]) : '';
-    if (col.thu >= 0 && !matchDay(String(v[i][col.thu] || '').trim(), thu)) continue;
+    if (String(v[i][0]).trim() !== ma) continue;
+    var ngayCell, caCell, bd, kt;
+    if (ncols >= 7) { // sheet cũ 7 cột (A Mã B Tên C Thứ D Ngày E Ca F BD G KT)
+      ngayCell = String(v[i][3]).trim();
+      caCell = String(v[i][4] || '');
+      bd = fmtTimeCell(v[i][5]); kt = fmtTimeCell(v[i][6]);
+      if (!matchDay(String(v[i][2]).trim(), thu)) continue;
+    } else { // sheet chuẩn 6 cột (A Mã B Tên C Ngày D Ca E BD F KT)
+      ngayCell = String(v[i][2]).trim();
+      caCell = String(v[i][3] || '');
+      bd = fmtTimeCell(v[i][4]); kt = fmtTimeCell(v[i][5]);
+    }
     if (!matchDay(ngayCell, thu)) continue;
-    out.push({ ca: caCell.trim(), bd: bd, kt: kt });
+    out.push({ ca: String(caCell).trim(), bd: bd, kt: kt });
   }
   // Sắp xếp ca gần giờ hiện tại nhất lên đầu để GV chỉ cần tick ca đầu
   var nowMin = new Date().getHours() * 60 + new Date().getMinutes();
@@ -517,19 +421,23 @@ function getChuaCham(ngayStr) {
   if (!shL || shL.getLastRow() < 2) return [];
   var thu = weekDay(parseVNDate(ngayStr));
   var lv = shL.getDataRange().getDisplayValues();
-  var colL2 = cotLichLam(lv[0]); // AUDIT 03/10: đọc theo tên cột
+  var nc = lv[0].length;
   var lich = {};
   for (var i = 1; i < lv.length; i++) {
-    if (!lv[i][colL2.ma]) continue;
-    var ma = String(lv[i][colL2.ma]).trim();
-    if (colL2.thu >= 0 && !matchDay(String(lv[i][colL2.thu] || '').trim(), thu)) continue;
-    var ngayCell = colL2.ngay >= 0 ? String(lv[i][colL2.ngay] || '').trim() : '';
-    var caCell = colL2.ca >= 0 ? String(lv[i][colL2.ca] || '') : '';
-    var bd = colL2.bd >= 0 ? fmtTimeCell(lv[i][colL2.bd]) : '';
-    var kt = colL2.kt >= 0 ? fmtTimeCell(lv[i][colL2.kt]) : '';
+    if (!lv[i][0]) continue;
+    var ma = String(lv[i][0]).trim();
+    var ngayCell, caCell, bd;
+    if (nc >= 7) {
+      if (!matchDay(String(lv[i][2]).trim(), thu)) continue;
+      ngayCell = String(lv[i][3]).trim();
+      caCell = String(lv[i][4] || ''); bd = fmtTimeCell(lv[i][5]);
+    } else {
+      ngayCell = String(lv[i][2]).trim();
+      caCell = String(lv[i][3] || ''); bd = fmtTimeCell(lv[i][4]);
+    }
     if (!matchDay(ngayCell, thu)) continue;
     if (!lich[ma]) lich[ma] = { ma: ma, ten: String(lv[i][1] || ''), cas: [] };
-    lich[ma].cas.push({ caName: String(caCell).trim(), text: (caCell ? caCell + ' ' : '') + bd, kt: kt });
+    lich[ma].cas.push({ caName: String(caCell).trim(), text: (caCell ? caCell + ' ' : '') + bd, kt: (nc >= 7 ? fmtTimeCell(lv[i][6]) : fmtTimeCell(lv[i][5])) });
   }
   var daChamHoacVang = {};
   var caDaChamTheoNgay = {}; // ngay -> danh sách ca đã có IN/VẮNG (dạng full label)
@@ -596,8 +504,7 @@ function isQuaGioCa(ngayStr, kt) {
 function getBaoCaoThang(ma, thangStr) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN');
   var res = { ma: ma, ten: '', thang: thangStr, tongGio: 0, gioTangCuong: 0, soCa: 0, soLanTre: 0,
-    soLanQuenIN: 0, soLanQuenRA: 0, soVangCoPhep: 0, soVangKhongBao: 0, vangKhongBaoChiTiet: [], kpi: 100, chiTiet: [],
-    ngayCong: 0, gioTheoTuan: {}, soNgayQuet: 0 };
+    soLanQuenIN: 0, soLanQuenRA: 0, soVangCoPhep: 0, soVangKhongBao: 0, vangKhongBaoChiTiet: [], kpi: 100, chiTiet: [] };
   if (!sh || sh.getLastRow() < 2) return res;
   var v = sh.getDataRange().getDisplayValues();
   var vRaw = sh.getDataRange().getValues(); // B4: cột Ngày lấy Date gốc
@@ -657,18 +564,6 @@ function getBaoCaoThang(ma, thangStr) {
     });
     if (openIn) res.soLanQuenRA++;
   }
-  // AUDIT 03/10: tổng kết ngày công + giờ theo tuần (để so với văn phòng chấm tay).
-  // Đếm ngày công = số ngày khác nhau có IN/VẮNG; giờ tuần gom theo tuần T2-CN.
-  var ngayCoMat = {};
-  rows.forEach(function (r) {
-    if (r.type === 'IN' || r.type === 'VẮNG') ngayCoMat[r.ngay] = true;
-  });
-  res.ngayCong = Object.keys(ngayCoMat).length;
-  res.soNgayQuet = rows.length;
-  res.chiTiet.forEach(function (c) {
-    var w = tuanCuaNgay(c.ngay);
-    res.gioTheoTuan[w] = Math.round(((res.gioTheoTuan[w] || 0) + c.gio) * 100) / 100;
-  });
   // VẮNG KHÔNG BÁO: so lịch (LICHLAM) với thực tế — ca nào trong lịch mà
   // không có dòng IN/VẮNG trong CHECK IN thì tính như 1 lần trễ để trừ KPI,
   // chỉ hiện trong báo cáo tháng + Lỗi tháng, KHÔNG ghi thêm dòng vào Sheet.
@@ -696,17 +591,19 @@ function tinhVangKhongBao(ma, thangStr, res) {
   var mm = Number(p[0]), yyyy = Number(p[1]);
   var daysInMonth = new Date(yyyy, mm, 0).getDate();
   // Gom lịch theo thứ trong tuần: ma|thu -> [{ca, bd, kt}]
-  // AUDIT 03/10: đọc theo TÊN CỘT (chịu được cột tính toán thêm phía sau LICHLAM).
   var lv = shL.getDataRange().getDisplayValues();
-  var colL = cotLichLam(lv[0]);
+  var nc = lv[0].length;
   var lichTuan = {};
   for (var i = 1; i < lv.length; i++) {
-    if (String(lv[i][colL.ma]).trim() !== ma) continue;
-    var thuCell = colL.thu >= 0 ? String(lv[i][colL.thu] || '').trim() : '';
-    var ngayCell = colL.ngay >= 0 ? String(lv[i][colL.ngay] || '').trim() : '';
-    var caCell = colL.ca >= 0 ? String(lv[i][colL.ca] || '') : '';
-    var bd = colL.bd >= 0 ? fmtTimeCell(lv[i][colL.bd]) : '';
-    var kt = colL.kt >= 0 ? fmtTimeCell(lv[i][colL.kt]) : '';
+    if (String(lv[i][0]).trim() !== ma) continue;
+    var thuCell, ngayCell, caCell, bd, kt;
+    if (nc >= 7) {
+      thuCell = String(lv[i][2]).trim(); ngayCell = String(lv[i][3]).trim();
+      caCell = String(lv[i][4] || ''); bd = fmtTimeCell(lv[i][5]); kt = fmtTimeCell(lv[i][6]);
+    } else {
+      thuCell = ''; ngayCell = String(lv[i][2]).trim();
+      caCell = String(lv[i][3] || ''); bd = fmtTimeCell(lv[i][4]); kt = fmtTimeCell(lv[i][5]);
+    }
     var thus = [];
     if (thuCell) { thus = [thuCell]; }
     else { thus = ['T2','T3','T4','T5','T6','T7','CN']; }
@@ -767,154 +664,6 @@ function getBaoCaoThangTatCa(thangStr) {
   });
   out.sort(function (a, b) { return a.ma < b.ma ? -1 : 1; });
   return out;
-}
-
-/* ---------- Tính lương tháng ---------- */
-// Đọc 1 dòng LƯƠNG TAY theo mã + tháng. Thiếu thì trả object 0.
-function docLuongTay(ma, thangStr) {
-  var tay = { soLop: 0, soBuoi: 0, chuan: 0, phep: 0, nghiKL: 0, diem: 0, tienVP: 0, gioVP: 0 };
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('LUONG_TAY');
-  if (!sh || sh.getLastRow() < 2) return tay;
-  var v = sh.getDataRange().getValues();
-  for (var i = 1; i < v.length; i++) {
-    if (String(v[i][0] || '').trim() !== thangStr) continue;
-    if (String(v[i][1] || '').trim() !== ma) continue;
-    tay.soLop = Number(v[i][3] || 0);
-    tay.soBuoi = Number(v[i][4] || 0);
-    tay.chuan = Number(v[i][5] || 0);
-    tay.phep = Number(v[i][6] || 0);
-    tay.nghiKL = Number(v[i][7] || 0);
-    tay.diem = Number(v[i][8] || 0);
-    tay.tienVP = Number(v[i][9] || 0);
-    tay.gioVP = Number(v[i][10] || 0);
-    break;
-  }
-  return tay;
-}
-
-// Cộng tiền dạy kèm trong sheet LƯƠNG KEM theo mã + tháng.
-// Thành tiền trống thì = Số buổi x Đơn giá; có số thì lấy số bạn gõ.
-function tongLuongKem(ma, thangStr) {
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('LUONG_KEM');
-  if (!sh || sh.getLastRow() < 2) return 0;
-  var v = sh.getDataRange().getValues();
-  var tong = 0;
-  for (var i = 1; i < v.length; i++) {
-    if (String(v[i][0] || '').trim() !== thangStr) continue;
-    if (String(v[i][1] || '').trim() !== ma) continue;
-    var thanhTien = Number(v[i][6] || 0);
-    if (!thanhTien) thanhTien = Number(v[i][3] || 0) * Number(v[i][5] || 0);
-    tong += thanhTien;
-  }
-  return Math.round(tong);
-}
-
-// Tính lương 1 người trong 1 tháng.
-function getLuong1Nguoi(ma, thangStr) {
-  var g = giaLuong();
-  var bc = getBaoCaoThang(ma, thangStr);
-  var tay = docLuongTay(ma, thangStr);
-  var tyLeCung = (g.tyLe && g.tyLe['CUNG']) || 0.7;
-  var tyLeThuong = (g.tyLe && g.tyLe['THUONG']) || 0.3;
-  var tyLeBH = (g.tyLe && g.tyLe['BHXH']) || 0.105;
-  var cheDo = g.cheDo[ma] || 'Fulltime';
-  var giaBuoi = g.bac[g.bacNV[ma]] || 0;
-  var tienLop = (cheDo === 'Fulltime')
-    ? giaBuoi * 8 * (tay.soLop || 0)
-    : giaBuoi * (tay.soBuoi || 0);
-  var luongCung = tienLop * tyLeCung;
-  var mauSo = tay.chuan || g.ngayChuan[thangStr] || 26;
-  var ngayThuc = (bc.ngayCong || 0) + (tay.phep || 0);
-  var luongThang = mauSo ? (luongCung / mauSo * ngayThuc) : 0;
-  // AUDIT 03/10: part-time KHÔNG chấm theo ngày công — tiền lớp đã đếm buổi
-  // thật nên lương tháng lấy thẳng 70%, không chia theo ngày (kẻo phạt 2 lần).
-  if (cheDo !== 'Fulltime') luongThang = tienLop * tyLeCung;
-  var tienKem = tongLuongKem(ma, thangStr);
-  var kiemNhiem = g.kiemNhiem[ma] || 0;
-  // Trường hợp riêng Hạnh Nhung
-  if (ma === 'NV2503' && thangStr === '09/2026' && !tay.tienVP) {
-    var giaVP = (g.vpGio && g.vpGio.gia) || 42000;
-    kiemNhiem = (tay.soBuoi || 0) * 120000 + (tay.gioVP || 0) * giaVP; // kỳ vọng 387k
-  } else if (ma === 'NV2503' && (tay.tienVP || 0)) {
-    kiemNhiem = tay.tienVP; // tháng 10 trở đi: 2.35tr + lớp tính ở tienLop
-  }
-  // Thưởng theo mốc điểm (điểm nhập 0-1 hoặc 0-100 đều được)
-  // AUDIT 03/10: điểm 0 = chưa nhập -> KHÔNG thưởng (không phải 0% thật).
-  // Muốn cho 0% thật thì nhập 0.001 hoặc ghi chú riêng.
-  var mucThuong = tienLop * tyLeThuong;
-  var tienThuong = 0;
-  if ((tay.diem || 0) > 0) {
-    var diem100 = tay.diem <= 1 ? tay.diem * 100 : tay.diem;
-    var mocs = g.mocThuong.length ? g.mocThuong : [{ moc: 85, tyLe: 1 }, { moc: 70, tyLe: 0.75 }, { moc: 50, tyLe: 0.5 }];
-    var tyLe = 0;
-    for (var i = 0; i < mocs.length; i++) { if (diem100 >= mocs[i].moc) { tyLe = mocs[i].tyLe; break; } }
-    tienThuong = mucThuong * tyLe;
-  }
-  var tong = luongThang + kiemNhiem + tienKem + tienThuong;
-  var mucBH = g.bhxhMuc[ma] || g.bhxhMuc['MAC_DINH'] || 5100000;
-  var truBH = Math.round(mucBH * tyLeBH);
-  return { ma: ma, cheDo: cheDo, tienLop: Math.round(tienLop), luongThang: Math.round(luongThang),
-    kiemNhiem: Math.round(kiemNhiem), tienKem: Math.round(tienKem),
-    tienThuong: Math.round(tienThuong), tong: Math.round(tong),
-    truBH: truBH, thucNhan: Math.round(tong - truBH),
-    ngayCong: bc.ngayCong || 0, tongGio: bc.tongGio || 0, diem: tay.diem || 0 };
-}
-
-// Cả bảng lương 1 tháng (bỏ người đã nghỉ). Kèm giờ tuần để so với văn phòng.
-function getBangLuongTatCa(thangStr) {
-  var g = giaLuong();
-  var list = getNhanVienList();
-  var out = [];
-  list.forEach(function (n) {
-    if (g.nghiTu && g.nghiTu[n.ma] && thangSoSanh(thangStr) >= thangSoSanh(g.nghiTu[n.ma])) return;
-    var r = getLuong1Nguoi(n.ma, thangStr);
-    r.ten = n.ten;
-    var bc = getBaoCaoThang(n.ma, thangStr);
-    r.gioTheoTuan = bc.gioTheoTuan || {};
-    out.push(r);
-  });
-  out.sort(function (a, b) { return a.ma < b.ma ? -1 : 1; });
-  return out;
-}
-
-// 'MM/yyyy' -> số để so sánh tháng (VD 09/2026 -> 202609)
-function thangSoSanh(t) {
-  var p = String(t || '').split('/');
-  if (p.length !== 2) return 0;
-  return Number(p[1]) * 100 + Number(p[0]);
-}
-
-function testLuongT9() {
-  // Kỳ vọng Nhung tháng 9: kiemNhiem = 387000 (2x120k + 3.5x42k) — cần có dòng LUONG_TAY 09/2026
-  var g = giaLuong();
-  Logger.log('Bac 5 = ' + g.bac[5] + ' (ky vong 200000)');
-  var r = getLuong1Nguoi('NV0101', '09/2026');
-  Logger.log('Ngoc 5 lop: tienLop = ' + r.tienLop + ' (ky vong 8000000 neu soLop=5)');
-}
-
-// Tuần của 1 ngày dd/MM/yyyy -> 'Tuan dd/MM-dd/MM' (T2-CN chứa ngày đó).
-function tuanCuaNgay(ngayStr) {
-  var m = String(ngayStr || '').match(/(\d\d)\/(\d\d)\/(\d{4})/);
-  if (!m) return ngayStr;
-  var d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-  var dow = (d.getDay() + 6) % 7; // T2=0..CN=6
-  var t2 = new Date(d); t2.setDate(d.getDate() - dow);
-  var cn = new Date(t2); cn.setDate(t2.getDate() + 6);
-  var p = function (n) { return (n < 10 ? '0' : '') + n; };
-  return 'Tuần ' + p(t2.getDate()) + '/' + p(t2.getMonth() + 1) +
-    '-' + p(cn.getDate()) + '/' + p(cn.getMonth() + 1);
-}
-
-function testTuanCuaNgay() {
-  Logger.log(tuanCuaNgay('03/10/2026') + ' (ky vong Tuan 29/09-05/10)');
-  Logger.log(tuanCuaNgay('30/09/2026') + ' (ky vong Tuan 28/09-04/10)');
-}
-
-function testCotLichLam() {
-  var c1 = cotLichLam(['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc']);
-  Logger.log('6 cot chuan: ' + JSON.stringify(c1));
-  var c2 = cotLichLam(['Mã NV', 'Họ tên', 'Ngày', 'Ca', 'Giờ bắt đầu', 'Giờ kết thúc', 'Giờ out - Giờ in', 'Tổng giờ tuần']);
-  Logger.log('8 cot (them 2 cot tinh): ngay=' + c2.ngay + ' ca=' + c2.ca + ' bd=' + c2.bd + ' kt=' + c2.kt + ' (ky vong 2,3,4,5)');
 }
 
 function gioLam(inR, outR, ngayStr) {
