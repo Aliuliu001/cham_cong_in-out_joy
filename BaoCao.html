@@ -181,7 +181,7 @@ function xemThang() {
   google.script.run.withSuccessHandler(function (list) {
     if (!list.length) { kq.innerHTML = '<p>Chưa có dữ liệu tháng này.</p>'; return; }
     var h = '<p><b>Bảng tổng hợp tất cả nhân viên — Tháng ' + th + '</b></p>';
-    h += '<table><tr><th>Mã</th><th>Họ tên</th><th>Tổng giờ</th><th>Giờ tăng cường</th><th>Số ca</th><th>Lần trễ</th><th>Chưa IN</th><th>Chưa OUT</th><th>Vắng có phép</th><th>Vắng không báo</th><th>KPI</th></tr>';
+    h += '<table><tr><th>Mã</th><th>Họ tên</th><th>Tổng giờ</th><th>Giờ tăng cường</th><th>Số ca</th><th>Trễ IN</th><th>Quên IN</th><th>Quên OUT</th><th>Vắng có phép</th><th>Vắng không báo</th><th>KPI</th></tr>';
     list.forEach(function (r) {
       h += '<tr>' +
         '<td><b>' + r.ma + '</b></td>' +
@@ -189,7 +189,7 @@ function xemThang() {
         '<td><b>' + r.tongGio + 'h</b></td>' +
         '<td>' + r.gioTangCuong + 'h</td>' +
         '<td>' + r.soCa + '</td>' +
-        '<td class="' + (r.soLanTre ? 'tre' : '') + '">' + r.soLanTre + '</td>' +
+        '<td class="' + (r.soLanTreThucTe ? 'tre' : '') + '">' + (r.soLanTreThucTe || 0) + '</td>' +
         '<td class="' + (r.soLanQuenIN ? 'tre' : '') + '">' + r.soLanQuenIN + '</td>' +
         '<td class="' + (r.soLanQuenRA ? 'tre' : '') + '">' + r.soLanQuenRA + '</td>' +
         '<td>' + (r.soVangCoPhep || 0) + '</td>' +

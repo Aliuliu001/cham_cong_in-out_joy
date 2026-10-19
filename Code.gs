@@ -504,7 +504,8 @@ function isQuaGioCa(ngayStr, kt) {
 function getBaoCaoThang(ma, thangStr) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN');
   var res = { ma: ma, ten: '', thang: thangStr, tongGio: 0, gioTangCuong: 0, soCa: 0, soLanTre: 0,
-    soLanQuenIN: 0, soLanQuenRA: 0, soVangCoPhep: 0, soVangKhongBao: 0, vangKhongBaoChiTiet: [], kpi: 100, chiTiet: [] };
+    soLanQuenIN: 0, soLanQuenRA: 0, soVangCoPhep: 0, soVangKhongBao: 0, vangKhongBaoChiTiet: [], kpi: 100, chiTiet: [], 
+    soLanTreThucTe: 0 };
   if (!sh || sh.getLastRow() < 2) return res;
   var v = sh.getDataRange().getDisplayValues();
   var vRaw = sh.getDataRange().getValues(); // B4: cột Ngày lấy Date gốc
@@ -542,6 +543,7 @@ function getBaoCaoThang(ma, thangStr) {
         var caName = r.ca || 'Ca chung';
         if (r.tre > 0 && !caDaTinhTre[caName]) {
           res.soLanTre++;
+          res.soLanTreThucTe++;
           caDaTinhTre[caName] = true;
         }
       } else if (r.type === 'VẮNG') {
@@ -550,6 +552,7 @@ function getBaoCaoThang(ma, thangStr) {
         var caV = r.ca || 'Ca chung';
         if (r.tre > 0 && !caDaTinhTre[caV]) {
           res.soLanTre++;
+          res.soLanTreThucTe++;
           caDaTinhTre[caV] = true;
         }
       } else if (r.type === 'OUT' && openIn) {
@@ -646,8 +649,7 @@ function tinhVangKhongBao(ma, thangStr, res) {
       }
       if (!found) {
         res.soVangKhongBao++;
-        res.soLanTre++; // tính như 1 lần trễ
-        res.soLanQuenIN++;
+        res.soLanTre++; // tính như 1 lần trễ cho KPI
         res.vangKhongBaoChiTiet.push({ ngay: ngayStr, ca: c.ca });
       }
     });
@@ -733,12 +735,12 @@ function xuatBaoCaoSheet(thangStr) {
   else { sh.clear(); }
   
   sh.appendRow(['BẢNG TỔNG HỢP CHẤM CÔNG THÁNG ' + thangStr]);
-  sh.appendRow(['Mã NV', 'Họ và tên', 'Tổng giờ', 'Giờ tăng cường', 'Số ca', 'Số lần trễ', 'Số lần quên IN', 'Số lần quên OUT', 'Vắng có phép', 'Vắng không báo', 'KPI (%)']);
+  sh.appendRow(['Mã NV', 'Họ và tên', 'Tổng giờ', 'Giờ tăng cường', 'Số ca', 'Trễ IN', 'Quên IN', 'Quên OUT', 'Vắng có phép', 'Vắng không báo', 'KPI (%)']);
   
   var summaryRows = [];
   list.forEach(function (n) {
     var r = getBaoCaoThang(n.ma, thangStr);
-    summaryRows.push([r.ma, n.ten, r.tongGio, r.gioTangCuong, r.soCa, r.soLanTre, r.soLanQuenIN, r.soLanQuenRA, r.soVangCoPhep, r.soVangKhongBao, r.kpi]);
+    summaryRows.push([r.ma, n.ten, r.tongGio, r.gioTangCuong, r.soCa, r.soLanTreThucTe, r.soLanQuenIN, r.soLanQuenRA, r.soVangCoPhep, r.soVangKhongBao, r.kpi]);
   });
   if (summaryRows.length > 0) {
     sh.getRange(3, 1, summaryRows.length, summaryRows[0].length).setValues(summaryRows);
@@ -783,10 +785,6 @@ function xuatBaoCaoSheet(thangStr) {
         errRows.push([ngay, ma, ten, ca, 'Đi làm trễ (báo vắng muộn)', tre + 'p', note]);
       }
       // B6: VẮNG đúng giờ chỉ nằm ở bảng tổng hợp, KHÔNG ghi vào bảng lỗi.
-      // 2. Quên OUT / Hệ thống tự OUT
-      if (note.indexOf('Quên check out') !== -1 || note.indexOf('tự OUT') !== -1) {
-        errRows.push([ngay, ma, ten, ca, 'Quên check out', '', note]);
-      }
       // 2b. 1 máy chấm cho 2 người cùng ngày
       if (note.indexOf('1 máy chấm cho 2 người') !== -1) {
         errRows.push([ngay, ma, ten, ca, '1 máy – 2 người', '', note]);
@@ -801,6 +799,41 @@ function xuatBaoCaoSheet(thangStr) {
           }
         }
         if (!coIn) errRows.push([ngay, ma, ten, ca, 'Quên check in (RA không có VÀO)', '', note]);
+      }
+    }
+    
+    // 2. Quên OUT: Gom theo ngày+mã để tìm IN không có OUT
+    var byDayMa = {};
+    for (var i = 1; i < v.length; i++) {
+      if (!v[i][0]) continue;
+      var ngay = ngayCuaO(vN[i][2]);
+      var month = thangCuaO(vN[i][2]);
+      if (month !== thangStr) continue;
+      var ma = String(v[i][0]).trim();
+      var key = ngay + '|' + ma;
+      if (!byDayMa[key]) byDayMa[key] = [];
+      byDayMa[key].push({
+        ma: ma, ten: String(v[i][1]), ca: String(v[i][3]), loai: String(v[i][4]),
+        gioIn: v[i][5], gioOut: v[i][6], note: String(v[i][8])
+      });
+    }
+    for (var key in byDayMa) {
+      var rows = byDayMa[key];
+      var ngay = key.split('|')[0];
+      var openIn = null;
+      rows.forEach(function (r) {
+        if (r.loai === 'IN') {
+          if (openIn) {
+            // IN mới mà chưa OUT lần trước → ghi lỗi cho lần trước
+            errRows.push([ngay, openIn.ma, openIn.ten, openIn.ca, 'Quên check out', '', openIn.note]);
+          }
+          openIn = r;
+        } else if (r.loai === 'OUT' && openIn) {
+          openIn = null;
+        }
+      });
+      if (openIn) {
+        errRows.push([ngay, openIn.ma, openIn.ten, openIn.ca, 'Quên check out', '', openIn.note]);
       }
     }
   }
