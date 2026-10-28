@@ -688,11 +688,18 @@ function testGioLam() {
 /* ---------- Xuất chấm công tính lương (chỉ đọc CHECK IN/LICHLAM) ---------- */
 var PAYROLL_EXPORT_HEADERS = ['Mã NV', 'Họ tên', 'Ngày', 'Ca lịch', 'Giờ VÀO', 'Giờ RA', 'Loại', 'Trễ (phút)', 'Trạng thái ca', 'Số giờ thực tế', 'Đủ ca theo lịch', 'Ghi chú'];
 
+function getPayrollAttendanceSource(ss, monthStr) {
+  // Tháng đã chốt luôn ưu tiên bản snapshot, vì CHECK IN hiện tại có thể đã được dọn.
+  var snapshotName = 'CHECK IN - Tháng ' + monthStr.replace('/', '-');
+  var snapshot = ss.getSheetByName(snapshotName);
+  return { sheet: snapshot || ss.getSheetByName('CHECK IN'), name: snapshot ? snapshotName : 'CHECK IN', locked: !!snapshot };
+}
+
 function getPayrollAttendanceRows(monthStr) {
   var m = String(monthStr || '').match(/^(0[1-9]|1[0-2])\/(\d{4})$/);
   if (!m) throw new Error('Tháng không hợp lệ. Dùng định dạng MM/yyyy.');
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sh = ss.getSheetByName('CHECK IN');
+  var sh = getPayrollAttendanceSource(ss, monthStr).sheet;
   var shL = ss.getSheetByName('LICHLAM');
   var result = {};
   var days = new Date(Number(m[2]), Number(m[1]), 0).getDate();
@@ -725,7 +732,8 @@ function getPayrollAttendanceRows(monthStr) {
       var ma2 = String(cv[j][0] || '').trim(); if (!ma2) continue;
       var day2 = ngayCuaO(raw[j][2]); if (thangCuaO(raw[j][2]) !== monthStr) continue;
       var ca2 = String(cv[j][3] || '').trim(), r = add(ma2, String(cv[j][1] || ''), day2, ca2);
-      var type = String(cv[j][4] || '').trim(), timeIn = fmtGioHMS(cv[j][5]), timeOut = fmtGioHMS(cv[j][6]);
+      // File trao cho Bảng lương chỉ dùng HH:mm, không kèm giây.
+      var type = String(cv[j][4] || '').trim(), timeIn = cellHM(cv[j][5]), timeOut = cellHM(cv[j][6]);
       if (type === 'IN') { r.hasIn = true; if (timeIn && (!r.vao || timeIn < r.vao)) r.vao = timeIn; r.tre = Math.max(r.tre, Number(cv[j][7] || 0)); }
       else if (type === 'OUT') { r.hasOut = true; if (timeOut && (!r.ra || timeOut > r.ra)) r.ra = timeOut; }
       else if (type === 'VẮNG') { r.absent = String(cv[j][8] || '').toLowerCase().indexOf('không báo') >= 0 ? 'Vắng không báo' : 'Vắng'; r.tre = Math.max(r.tre, Number(cv[j][7] || 0)); }
@@ -739,7 +747,11 @@ function getPayrollAttendanceRows(monthStr) {
   });
   var rows = Object.keys(result).map(function(key) {
     var r = result[key], status, type, hours = '';
-    if (r.absent) { status = r.absent; type = r.absent; }
+    if (r.absent) {
+      status = r.absent;
+      type = r.absent;
+      if (r.absent === 'Vắng không báo' && r.notes.join(' | ').indexOf('Vắng không báo') === -1) r.notes.push('Vắng không báo');
+    }
     else if (!r.hasIn) { status = 'Thiếu IN'; type = r.hasOut ? 'OUT' : ''; }
     else if (!r.hasOut) { status = 'Thiếu OUT'; type = 'IN'; }
     else { status = 'Đủ ca'; type = 'IN/OUT'; }

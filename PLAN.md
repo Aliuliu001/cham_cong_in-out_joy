@@ -24,6 +24,13 @@ Mã NV | Họ và tên | Ngày | Ca | Loại IN/OUT | Giờ check in | Giờ che
 - [x] Nút RA hiện đúng chữ CHECK OUT.
 - [x] Bỏ trừ sớm 15'/30' khi tính trễ.
 
+## Xuất chấm công một chiều cho app Bảng lương (hoàn thành 2026-10-28)
+- Có 3 nút tại **Báo cáo tháng**: xem trước, tải CSV, tải Excel.
+- Dữ liệu chỉ đi theo chiều CHECK IN/LICHLAM → tệp tải xuống → app Bảng lương; không có chức năng tính tiền hoặc ghi ngược.
+- Tháng có sheet `CHECK IN - Tháng MM-yyyy` phải ưu tiên đọc bản đã chốt; tháng không có bản chốt đọc `CHECK IN`.
+- Một dòng tệp là một nhân viên + một ngày + một ca lịch, gồm đúng 12 cột đã thống nhất với app Bảng lương.
+- CSV là UTF-8 BOM; Excel có sheet `Cham cong` và cố định hàng tiêu đề.
+
 ## Việc còn lại
 - [ ] Sửa README cho khớp luật mới (đang ghi sai "GV trước 15'").
 - [ ] Test thực tế 1 buổi: bấm IN đúng giờ, IN trễ, VẮNG đúng giờ, VẮNG muộn, bỏ 1 ca không bấm → đối chiếu báo cáo ngày + tháng.

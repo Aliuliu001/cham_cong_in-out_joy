@@ -7,7 +7,7 @@ Nền tảng: Google Apps Script + Google Sheets + Google Drive.
 
 - `Code.gs` — backend: giờ server, kiểm tra GPS 100m, lưu Sheets + ảnh Drive, tính trễ, báo vắng (VẮNG), báo cáo ngày/tháng, tổng giờ, KPI.
 - `Index.html` — trang nhân viên quét QR mở: chọn VÀO/RA/VẮNG, chọn mã, chọn ca, chụp mặt (VẮNG không cần ảnh/GPS, bấm ở nhà được), xem giờ + GPS, bấm xác nhận.
-- `BaoCao.html` — trang bạn + văn phòng coi: ai trễ, ai vắng (có phép / không báo), ai quên RA, tổng giờ tháng, KPI.
+- `BaoCao.html` — trang bạn + văn phòng coi: ai trễ, ai vắng (có phép / không báo), ai quên RA, tổng giờ tháng, KPI; có khu vực xuất dữ liệu chấm công một chiều cho app Bảng lương.
 - `PLAN.md` — quy tắc chung + việc đã xong / còn lại (1 Sheet CHECK IN duy nhất, Loại chỉ có IN/OUT/VẮNG).
 - `appsscript.json` — cấu hình Apps Script (múi giờ VN).
 - `Form_NhanVien_LichLam.xlsx` — file mẫu thu danh sách + lịch lần đầu.
@@ -34,6 +34,22 @@ Nền tảng: Google Apps Script + Google Sheets + Google Drive.
 - Muốn duyệt phép bù cho ca thiếu: quản lý ghi tay 1 dòng Loại VẮNG + chữ DUYỆT BÙ và lý do ở Ghi chú.
 - Giờ 1 ca = giờ RA thực (nhưng không quá giờ kết thúc ca) − giờ bắt đầu ca.
 - Quên RA chỉ ghi chú để trừ KPI. Trễ từ 4 lần/tháng → KPI = 0%.
+
+## Xuất chấm công cho app Bảng lương
+
+Trong **Báo cáo chấm công → Tổng hợp Tháng**, chọn tháng theo dạng `MM/yyyy`, rồi dùng khu vực **📤 Xuất chấm công để tính lương**:
+
+- **👀 Xem trước dữ liệu lương**: xem từng nhân viên, ngày và ca trước khi tải.
+- **⬇️ Tải CSV**: tệp UTF-8 có BOM để Excel mở tiếng Việt đúng.
+- **⬇️ Tải Excel**: tệp `.xlsx`, sheet tên `Cham cong`, cố định hàng tiêu đề.
+
+Tệp mang tên `Cham_cong_tinh_luong_MM-YYYY.csv` hoặc `.xlsx`. Đây là dữ liệu đối chiếu một chiều sang app Bảng lương: **không tính tiền, không sửa KPI, không ghi vào CHECK IN/LICHLAM/BAOCAO_THANG**.
+
+Nguồn của tháng đã chọn:
+
+1. Nếu có sheet `CHECK IN - Tháng MM-yyyy`, hệ thống đọc sheet chốt đó trước.
+2. Nếu chưa có bản chốt, hệ thống mới đọc `CHECK IN` hiện tại.
+3. Luôn đối chiếu `LICHLAM` để tạo đủ từng ca lịch, kể cả ca đã qua chưa có thao tác.
 
 ## Cách test thực tế 1 buổi (làm trên điện thoại sau khi Triển khai Phiên bản mới)
 

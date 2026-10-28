@@ -11,6 +11,13 @@
 
 ## Các Task Cần Làm
 
+### Task 5: Xuất chấm công để tính lương ✅
+- Có khu vực tại Báo cáo tháng với: 👀 Xem trước dữ liệu lương, ⬇️ Tải CSV, ⬇️ Tải Excel.
+- Chỉ đọc dữ liệu và tạo tệp tải xuống; không tính tiền, không thay KPI và không sửa CHECK IN, LICHLAM, BAOCAO_THANG hoặc sheet backup.
+- Ưu tiên sheet đã chốt `CHECK IN - Tháng MM-yyyy`; nếu không có mới đọc `CHECK IN`.
+- Xuất đúng 12 cột theo giao kèo với app Bảng lương; CSV UTF-8 BOM, Excel có sheet `Cham cong` và hàng tiêu đề cố định.
+- Có kiểm thử tự động các mốc trễ 0/19/20 phút, thiếu IN/OUT, VẮNG, Vắng không báo, tháng hiện tại và tháng đã chốt.
+
 ### Task 1: Cập nhật hàm setup() ✅
 - Xóa dòng tạo Sheet BAO_VANG
 - Giữ lại Sheet CHECK IN với cấu trúc hiện tại
