@@ -839,6 +839,15 @@ function isQuotaDate(ngay) { return ngay.slice(6) !== '2026' || ngay >= '01/11/2
 function daysInMonth(monthStr) { var p = monthStr.split('/'); return new Date(Number(p[1]), Number(p[0]), 0).getDate(); }
 function caHoursFromLabel(ngay, ca) { return scheduleHours(ngay, caBdFromLabel(ca), caKtFromLabel(ca)); }
 
+// Đếm quota quên chấm ca lịch trên toàn năm, gộp CHECK IN và các snapshot,
+// sau đó khử trùng theo nhân viên-ngày-ca. Lần miễn trừ của tháng đang xuất
+// phải biết các lần đã dùng từ những tháng trước, không được reset theo tháng.
+function getAnnualMissedBefore(ss, ma, ngayTarget) {
+  var year=ngayTarget.slice(6), all={}, sheets=ss.getSheets ? ss.getSheets() : [];
+  sheets.forEach(function(sh){ var name=sh.getName(); if(name!=='CHECK IN' && name.indexOf('CHECK IN - Tháng ')!==0)return; if(sh.getLastRow()<2)return; var d=sh.getDataRange(), v=d.getDisplayValues(), raw=d.getValues(); for(var i=1;i<v.length;i++){if(String(v[i][0]).trim()!==String(ma).trim())continue;var day=ngayCuaO(raw[i][2]);if(day.slice(6)!==year||(year==='2026'&&day<'01/11/2026'))continue;var k=day+'|'+String(v[i][3]||''),o=all[k]||(all[k]={day:day,in:false,out:false});if(v[i][4]==='IN')o.in=true;if(v[i][4]==='OUT')o.out=true;}});
+  var n=0;Object.keys(all).forEach(function(k){var o=all[k];if(o.day<ngayTarget&&o.in!==o.out)n++;});return n;
+}
+
 function getPayrollWorkbookData(monthStr) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), src = getPayrollAttendanceSource(ss, monthStr), schedSrc = payrollScheduleSource(ss, monthStr);
   var m = String(monthStr).match(/^(0[1-9]|1[0-2])\/(\d{4})$/); if (!m) throw new Error('Tháng không hợp lệ. Dùng MM/yyyy.');
@@ -859,10 +868,10 @@ function getPayrollWorkbookData(monthStr) {
   }
   Object.keys(shifts).forEach(function(k){var r=shifts[k];if(!r.isException&&!r.hasIn&&!r.hasOut&&!r.absent&&isQuaGioCa(r.ngay,r.kt))r.absent='Vắng không báo';});
   var annual={}, exMissed={}, details=[];
-  Object.keys(shifts).sort().forEach(function(k){var r=shifts[k], year=r.ngay.slice(6), ak=r.ma+'|'+year, ek=r.ma+'|'+monthStr, scheduled=scheduleHours(r.ngay,r.bd,r.kt)||caHoursFromLabel(r.ngay,r.ca), ev=evaluateAttendanceShift({hasIn:r.hasIn,hasOut:r.hasOut,vao:r.vao,ra:r.ra,ngay:r.ngay,lateMin:r.late,scheduleHours:scheduled,absent:r.absent,absentReason:r.absentReason,reportedLate:r.reportedLate,isException:r.isException},annual[ak]||0,exMissed[ek]||0);
+  Object.keys(shifts).sort().forEach(function(k){var r=shifts[k], year=r.ngay.slice(6), ak=r.ma+'|'+year, ek=r.ma+'|'+monthStr, scheduled=scheduleHours(r.ngay,r.bd,r.kt)||caHoursFromLabel(r.ngay,r.ca), before=(annual[ak]||0)+getAnnualMissedBefore(ss,r.ma,r.ngay), ev=evaluateAttendanceShift({hasIn:r.hasIn,hasOut:r.hasOut,vao:r.vao,ra:r.ra,ngay:r.ngay,lateMin:r.late,scheduleHours:scheduled,absent:r.absent,absentReason:r.absentReason,reportedLate:r.reportedLate,isException:r.isException},before,exMissed[ek]||0);
     if(!r.isException&&(r.hasIn!==r.hasOut)&&isQuotaDate(r.ngay))annual[ak]=(annual[ak]||0)+1;
     if(r.isException&&(r.hasIn!==r.hasOut))exMissed[ek]=(exMissed[ek]||0)+1;
-    details.push({r:r,ev:ev,quota:annual[ak]||0,source:sourceLabel,schedule:scheduleLabel});
+    details.push({r:r,ev:ev,quota:before + (!r.isException&&(r.hasIn!==r.hasOut)&&isQuotaDate(r.ngay)?1:0),source:sourceLabel,schedule:scheduleLabel});
   });
   var roles={};getNhanVienList().forEach(function(n){roles[n.ma]=n.role;});
   var byPerson={}, byWeek={}; details.forEach(function(x){var r=x.r,e=x.ev,pk=r.ma+'|'+r.ten;if(!byPerson[pk])byPerson[pk]={ma:r.ma,ten:r.ten,role:roles[r.ma]||'',actual:0,exempt:0,no:0,exceptions:0,quota:x.quota,kpi:[],leave:[],todo:[]};var p=byPerson[pk];p.quota=Math.max(p.quota,x.quota);if(e.result==='Tính theo giờ thực tế')p.actual+=Number(e.hours||0);else if(e.result==='Tính theo giờ lịch miễn trừ')p.exempt+=Number(e.hours||0);else if(e.result==='Không tính công')p.no++;else p.exceptions++;if(e.kpi==='Có')p.kpi.push(r.ngay+' — '+e.kpiReason);if(e.leave==='Trừ phép')p.leave.push(r.ngay+' — '+e.reason);if(e.result==='Chờ duyệt Exception'||e.result==='Không tính công')p.todo.push(r.ngay+' — '+e.reason);
