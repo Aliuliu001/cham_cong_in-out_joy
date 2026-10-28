@@ -1,66 +1,75 @@
 # Chấm công IN-OUT Joy
 
-Web check-in bằng 1 mã QR cố định, chạy trên iPhone + Android.
-Nền tảng: Google Apps Script + Google Sheets + Google Drive.
+Web chấm công QR cho điện thoại, dùng Google Apps Script + Google Sheets + Google Drive.
 
-## File trong repo này
+## Repo này làm gì
 
-- `Code.gs` — backend: giờ server, kiểm tra GPS 100m, lưu Sheets + ảnh Drive, tính trễ, báo vắng (VẮNG), báo cáo ngày/tháng, tổng giờ, KPI.
-- `Index.html` — trang nhân viên quét QR mở: chọn VÀO/RA/VẮNG, chọn mã, chọn ca, chụp mặt (VẮNG không cần ảnh/GPS, bấm ở nhà được), xem giờ + GPS, bấm xác nhận.
-- `BaoCao.html` — trang bạn + văn phòng coi: ai trễ, ai vắng (có phép / không báo), ai quên RA, tổng giờ tháng, KPI; có khu vực xuất dữ liệu chấm công một chiều cho app Bảng lương.
-- `PLAN.md` — quy tắc chung + việc đã xong / còn lại (1 Sheet CHECK IN duy nhất, Loại chỉ có IN/OUT/VẮNG).
-- `appsscript.json` — cấu hình Apps Script (múi giờ VN).
-- `Form_NhanVien_LichLam.xlsx` — file mẫu thu danh sách + lịch lần đầu.
+- Ghi CHECK IN, CHECK OUT, VẮNG và ca đột xuất Exception.
+- Đối chiếu với LICHLAM, báo cáo ngày/tháng, phép và các việc ảnh hưởng KPI.
+- Xuất bằng chứng chấm công một chiều sang app Bảng lương.
+- **Không tính tiền lương** và app Bảng lương không ghi ngược lại dữ liệu chấm công.
 
-## Cài 1 lần (khoảng 15 phút)
+## File chính
 
-1. Tạo 1 Google Sheets mới → mở Extensions → Apps Script.
-2. Copy từng file trong repo dán vào Apps Script đúng tên: Code.gs, Index, BaoCao (+ giữ appsscript.json).
-3. Trong Apps Script chạy hàm `setup()` 1 lần → tự tạo 3 trang: CHECK IN, DANHSACH, LICHLAM.
-4. Deploy → Deploy as web app → Execute as: Me → Who has access: Anyone → lấy link.
-5. Tạo mã QR từ link → in dán ở trung tâm. QR này dùng mãi.
-6. Nhập DANHSACH (mã + tên + vai trò) và LICHLAM (mã + thứ + ca + giờ bắt đầu + giờ kết thúc).
-7. Share trang LICHLAM cho nhân viên văn phòng quyền sửa, để bạn đó nhập lịch hàng tuần.
+- `Code.gs`: xử lý chấm công, GPS, ảnh, Sheet, báo cáo và export.
+- `Index.html`: màn hình giáo viên CHECK IN / OUT / VẮNG / Exception.
+- `BaoCao.html`: màn hình quản lý xem báo cáo, chốt tháng và xuất file.
+- `PLAN.md`: các luật nghiệp vụ đã chốt.
+- `TASKS.md`: các việc đang làm.
+- `context.md`: nguồn sự thật ngắn gọn để tiếp tục ở phiên sau.
 
-## Luật đã chốt
+## Luật quan trọng
 
-- Tọa độ trung tâm 11.937044, 108.444760 — bán kính 100m. Ngoài → không lưu, hiện số mét. (Riêng nút VẮNG bấm ở nhà được, không kiểm tra vị trí/ảnh.)
-- Giờ chấm = giờ bấm nút xác nhận (IN/OUT/VẮNG). Vị trí cũng lấy mới lúc bấm nút — mở web ở nhà rồi tới nơi mới bấm vẫn tính đúng giờ + vị trí lúc bấm.
-- Bắt buộc với VÀO/RA: mã (chọn từ danh sách) + GPS + ảnh mặt + giờ server. Ảnh nén nhỏ, giữ nguyên hướng, không lật.
-- Trễ = giờ bấm nút trừ thẳng giờ bắt đầu ca trong LICHLAM. Bạn tự ghi giờ ca — ví dụ ca ghi 8:00 thì bấm 8:01 = trễ 1 phút.
-- 1 người + 1 ngày + 1 ca chỉ được 1 dòng (đã VÀO thì không VẮNG được nữa, đã VẮNG thì không VÀO/VẮNG lại được, VÀO 2 lần bị chặn).
-- VẮNG (có phép hay không báo) đều = 0 giờ làm, không cộng vào tổng giờ.
-- VẮNG bấm muộn trừ KPI như đi trễ. Ca có lịch mà không VÀO cũng không VẮNG → tính là "Vắng không báo", cộng như 1 lần trễ để trừ KPI.
-- Muốn duyệt phép bù cho ca thiếu: quản lý ghi tay 1 dòng Loại VẮNG + chữ DUYỆT BÙ và lý do ở Ghi chú.
-- Giờ 1 ca = giờ RA thực (nhưng không quá giờ kết thúc ca) − giờ bắt đầu ca.
-- Quên RA chỉ ghi chú để trừ KPI. Trễ từ 4 lần/tháng → KPI = 0%.
+### Giờ làm
 
-## Xuất chấm công cho app Bảng lương
+- Có đủ IN + OUT: giờ = OUT − IN thực tế. Đi trễ vẫn tính giờ thực tế; ra sớm tính đến giờ OUT.
+- Giáo viên được kiểm soát theo tuần Thứ Hai → Chủ nhật, mốc hợp đồng 46 giờ.
+- Từ **40 giờ/tuần**, lúc CHECK IN chỉ hiện cảnh báo liên hệ Ms. Vân Anh để kiểm tra lịch; không chặn chấm.
+- Trên 46 giờ chỉ cảnh báo, không tự tính overtime.
 
-Trong **Báo cáo chấm công → Tổng hợp Tháng**, chọn tháng theo dạng `MM/yyyy`, rồi dùng khu vực **📤 Xuất chấm công để tính lương**:
+### Quên chấm ca lịch
 
-- **👀 Xem trước dữ liệu lương**: xem từng nhân viên, ngày và ca trước khi tải.
-- **⬇️ Tải CSV**: tệp UTF-8 có BOM để Excel mở tiếng Việt đúng.
-- **⬇️ Tải Excel**: tệp `.xlsx`, sheet tên `Cham cong`, cố định hàng tiêu đề.
+- Mỗi năm có 4 lần miễn trừ quên IN/OUT. Lần 1–4 vẫn tính theo giờ lịch của ca nhưng ghi rõ là miễn trừ.
+- Từ lần 5: không tính công và trừ KPI.
+- Quota tự reset ngày 01/01; riêng 2026 bắt đầu tính lại từ 01/11/2026.
 
-Tệp mang tên `Cham_cong_tinh_luong_MM-YYYY.csv` hoặc `.xlsx`. Đây là dữ liệu đối chiếu một chiều sang app Bảng lương: **không tính tiền, không sửa KPI, không ghi vào CHECK IN/LICHLAM/BAOCAO_THANG**.
+### Vắng
 
-Nguồn của tháng đã chọn:
+- Ốm / việc gia đình và Phụ huynh xin nghỉ, nếu báo trước giờ ca: không công, không KPI, ghi Trừ phép/ghi chú rõ.
+- Báo sau giờ ca: không công và ghi số phút báo trễ để xử lý KPI.
+- Không báo: Nghỉ không báo, không công, trừ KPI.
 
-1. Nếu có sheet `CHECK IN - Tháng MM-yyyy`, hệ thống đọc sheet chốt đó trước.
-2. Nếu chưa có bản chốt, hệ thống mới đọc `CHECK IN` hiện tại.
-3. Luôn đối chiếu `LICHLAM` để tạo đủ từng ca lịch, kể cả ca đã qua chưa có thao tác.
+### Exception
 
-## Cách test thực tế 1 buổi (làm trên điện thoại sau khi Triển khai Phiên bản mới)
+- Nút `🟣 CHECK IN CA ĐỘT XUẤT` / `🟣 CHECK OUT CA ĐỘT XUẤT` dành cho công việc không có lịch sẵn.
+- Bắt buộc có lý do, GPS và ảnh.
+- Exception đủ hai đầu chỉ ở trạng thái Chờ duyệt, chưa tự cộng giờ/lương.
+- Trong một tháng: Exception thiếu IN/OUT lần 1–3 chờ duyệt; từ lần thiếu thứ 4 không tính giờ. Exception không dùng quota miễn trừ của ca lịch.
 
-1. Bấm VÀO đúng giờ → cột Trễ phải = 0.
-2. Bấm VÀO trễ vài phút → hiện đúng số phút trễ.
-3. Bấm VẮNG đúng giờ (ở nhà) → ghi Loại VẮNG, trễ 0, không trừ KPI.
-4. Bấm VẮNG muộn → báo "Báo trễ X phút", trừ KPI như đi trễ.
-5. Bỏ 1 ca không bấm gì → hôm đó ca hiện "Vắng không báo", cuối tháng vào Sheet Lỗi tháng.
-6. Bấm trùng 2 lần cùng ca (VÀO 2 lần, VẮNG 2 lần, VÀO rồi VẮNG) → máy phải báo lỗi, không ghi thêm dòng.
+## Chốt tháng và xuất Bảng lương
 
-## Bản này chưa có
+Quản lý chốt tháng sẽ tạo hai bản dễ nhận biết:
 
-Nhận diện mặt tự động (ảnh chỉ để coi lại), chấm bù ngày cũ.
-update
+- `CHECK IN - Tháng MM-yyyy`
+- `LICHLAM - Tháng MM-yyyy`
+
+Các bản này dùng để xuất lại tháng cũ mà không bị thay đổi theo lịch hiện tại. Hệ thống không tự ghi đè bản đã chốt.
+
+File Excel dự kiến cho Bảng lương có 3 sheet: `Tong hop GV`, `Chi tiet ca`, `Gio tuan`; các ngày trừ KPI/trừ phép đều ghi rõ ngày, ca và lý do. CSV 12 cột hiện có vẫn giữ để tương thích.
+
+## Cài và triển khai
+
+1. Tạo Google Sheets → **Tiện ích mở rộng** → **Apps Script**.
+2. Dán `Code.gs`, `Index.html`, `BaoCao.html` đúng tên.
+3. Chạy `setup()` một lần.
+4. Triển khai web app.
+
+> Push GitHub không tự đổi web app Apps Script. Mỗi lần cập nhật: dán file mới → Lưu → **Triển khai → Quản lý các lượt triển khai → Phiên bản mới → Triển khai**.
+
+## Kiểm thử hiện có
+
+```bash
+node test_payroll_export.js
+```
+
+Kế hoạch và checklist đầy đủ: xem `PLAN.md`, `TASKS.md`, `context.md`.

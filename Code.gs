@@ -218,6 +218,21 @@ function getRole(ma) {
   return 'Giáo viên';
 }
 
+// Nhắc quên chấm và mốc 40 giờ; chỉ đọc dữ liệu, không khóa thao tác.
+function getCheckinNotice(ma) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), now = new Date(), year = String(now.getFullYear()), rows = [], sheets = ss.getSheets();
+  sheets.forEach(function(sh) { if (sh.getName() === 'CHECK IN' || sh.getName().indexOf('CHECK IN - Tháng ') === 0) { var v=sh.getDataRange().getDisplayValues(); for(var i=1;i<v.length;i++) rows.push(v[i]); } });
+  var by = {}, missed = 0, last = null;
+  rows.forEach(function(r) { if(String(r[0]).trim()!==String(ma).trim() || String(cellDay(r[2])).slice(6)!==year) return; var day=cellDay(r[2]); if(year==='2026' && day<'01/11/2026') return; var key=day+'|'+String(r[3]), o=by[key]||(by[key]={day:day,ca:String(r[3]),in:false,out:false}); if(r[4]==='IN')o.in=true; if(r[4]==='OUT')o.out=true; });
+  Object.keys(by).sort().forEach(function(k){var o=by[k];if(o.in!==o.out){missed++;last=o;}});
+  var weekStart=getWeekStart(fmtD(now)), weekEnd=new Date(now.getFullYear(),now.getMonth(),now.getDate()), weekHours=0, pairs={};
+  rows.forEach(function(r){if(String(r[0]).trim()!==String(ma).trim())return;var day=cellDay(r[2]);if(parseVNDate(day).getTime()<parseVNDate(weekStart).getTime()||parseVNDate(day).getTime()>weekEnd.getTime())return;var k=day+'|'+String(r[3]),o=pairs[k]||(pairs[k]={day:day,ca:String(r[3]),vao:'',ra:''});if(r[4]==='IN')o.vao=cellHM(r[5]);if(r[4]==='OUT')o.ra=cellHM(r[6]);});
+  Object.keys(pairs).forEach(function(k){var o=pairs[k];if(o.vao&&o.ra)weekHours+=Number(hoursBetween(o.day,o.vao,o.ra)||0);});
+  weekHours=Math.round(weekHours*100)/100;
+  var msg=[]; if(last) msg.push('Ca gần nhất chưa đủ chấm: '+last.day+' — '+last.ca+' (thiếu '+(last.in?'OUT':'IN')+'). Còn '+Math.max(0,4-missed)+'/4 lần miễn trừ năm nay.'); if(missed>=4) msg.push(MISSED_PUNCH_MESSAGE);
+  return { missed:missed, remaining:Math.max(0,4-missed), message:msg.join('\n'), weekHours:weekHours, warning40:weekHours>=40 };
+}
+
 /* ---------- Submit check-in ---------- */
 
 function submitCheckin(p) {
@@ -362,6 +377,29 @@ function getFolder() {
   if (it.hasNext()) return it.next();
   var f = DriveApp.createFolder(DRIVE_FOLDER);
   return f;
+}
+
+/* ---------- Exception: ca đột xuất có ảnh/GPS ---------- */
+function getExceptionStatus(ma) {
+  var sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN');
+  if(!sh || sh.getLastRow()<2) return {open:false};
+  var rows=sh.getDataRange().getDisplayValues();
+  for(var i=rows.length-1;i>=1;i--) if(String(rows[i][0]).trim()===String(ma).trim() && (rows[i][4]==='EXCEPTION_IN'||rows[i][4]==='EXCEPTION_OUT')) return {open:rows[i][4]==='EXCEPTION_IN', ca:String(rows[i][3]||'')};
+  return {open:false};
+}
+function submitException(p) {
+  if (!p.ma || !p.ten || !p.reason) return { ok:false, msg:'Bạn chọn mã, tên và lý do giúp mình.' };
+  if (!p.lat || !p.lng || !p.photo) return { ok:false, msg:'Ca đột xuất cần GPS và ảnh.' };
+  var now = new Date(p.submitTs || new Date().getTime()), dist=Math.round(haversine(p.lat,p.lng,CENTER_LAT,CENTER_LNG));
+  if (dist > RADIUS_M) return {ok:false,msg:'Bạn đang ngoài khu vực check-in: '+dist+' m.'};
+  var sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN'), rows=sh.getDataRange().getDisplayValues(), open=null;
+  // Sự kiện Exception gần nhất quyết định đang mở hay đã đóng; không mở chồng hai ca.
+  for(var i=rows.length-1;i>=1;i--) if(String(rows[i][0]).trim()===p.ma && (rows[i][4]==='EXCEPTION_IN'||rows[i][4]==='EXCEPTION_OUT')) { if(rows[i][4]==='EXCEPTION_IN') open=rows[i]; break; }
+  var type=open?'EXCEPTION_OUT':'EXCEPTION_IN', ca='Ca đột xuất — '+p.reason;
+  if(open) ca=String(open[3]);
+  var blob=Utilities.newBlob(Utilities.base64Decode(p.photo),'image/jpeg',p.ma+'_'+fmtFile(now)+'_'+type+'.jpg'), url=getFolder().createFile(blob).getUrl();
+  sh.appendRow([p.ma,p.ten,fmtD(now),ca,type,type==='EXCEPTION_IN'?cellHM(now):'',type==='EXCEPTION_OUT'?cellHM(now):'',0,'Exception | '+p.reason,url,dist,p.device||'']);
+  return {ok:true,msg:type==='EXCEPTION_IN'?'Đã CHECK IN CA ĐỘT XUẤT. Khi xong việc bấm lại CA ĐỘT XUẤT để CHECK OUT.':'Đã CHECK OUT CA ĐỘT XUẤT. Ca này chờ quản lý duyệt.',type:type};
 }
 
 /* ---------- Báo cáo ngày / tháng ---------- */
@@ -775,13 +813,147 @@ function exportPayrollAttendanceCsv(monthStr) {
 }
 
 function exportPayrollAttendanceXlsx(monthStr) {
-  var rows = [PAYROLL_EXPORT_HEADERS].concat(getPayrollAttendanceRows(monthStr));
+  var data = getPayrollWorkbookData(monthStr);
   var book = SpreadsheetApp.create('Cham cong tinh luong ' + monthStr);
-  var sheet = book.getSheets()[0]; sheet.setName('Cham cong');
-  sheet.getRange(1, 1, rows.length, PAYROLL_EXPORT_HEADERS.length).setValues(rows);
-  sheet.setFrozenRows(1);
+  var sheets = [{name:'Tong hop GV', data:[PAYROLL_SUMMARY_HEADERS].concat(data.summaryRows)}, {name:'Chi tiet ca', data:[PAYROLL_DETAIL_HEADERS].concat(data.detailRows)}, {name:'Gio tuan', data:[PAYROLL_WEEK_HEADERS].concat(data.weekRows)}];
+  sheets.forEach(function (part, index) {
+    var sh = index === 0 ? book.getSheets()[0] : book.insertSheet();
+    sh.setName(part.name);
+    if (part.data.length) sh.getRange(1, 1, part.data.length, part.data[0].length).setValues(part.data);
+    sh.setFrozenRows(1);
+  });
   var url = 'https://docs.google.com/spreadsheets/d/' + book.getId() + '/export?format=xlsx';
   return { url: url, filename: 'Cham_cong_tinh_luong_' + monthStr.replace('/', '-') + '.xlsx' };
+}
+
+var PAYROLL_DETAIL_HEADERS = ['Mã NV','Họ tên','Ngày','Loại ca','Tên ca','Giờ VÀO','Giờ RA','Số giờ','Kết quả công','Lý do','Ảnh hưởng KPI','Lý do KPI','Phép','Quên chấm năm nay','Trạng thái Exception','Ghi chú','Nguồn dữ liệu','Lịch đối chiếu','Phiên bản file'];
+var PAYROLL_SUMMARY_HEADERS = ['Mã NV','Họ tên','Vai trò','Tổng giờ hợp lệ tháng','Giờ miễn trừ','Số ca không tính công','Số Exception chờ duyệt','Quên chấm năm nay','Giờ tuần cao nhất','Tình trạng 46 giờ','Ngày cần xem KPI','Ngày trừ phép','Cần quản lý xem'];
+var PAYROLL_WEEK_HEADERS = ['Mã NV','Họ tên','Tuần từ','Tuần đến','Giờ thực tế hợp lệ','Giờ miễn trừ','Tổng giờ dùng kiểm soát lịch','Mốc hợp đồng','Còn lại/Vượt','Cảnh báo'];
+
+function payrollScheduleSource(ss, monthStr) {
+  var n = 'LICHLAM - Tháng ' + monthStr.replace('/', '-'), sh = ss.getSheetByName(n);
+  return { sheet: sh || ss.getSheetByName('LICHLAM'), locked: !!sh, name: sh ? n : 'LICHLAM' };
+}
+function isExceptionType(t) { return t === 'EXCEPTION_IN' || t === 'EXCEPTION_OUT'; }
+function isQuotaDate(ngay) { return ngay.slice(6) !== '2026' || ngay >= '01/11/2026'; }
+function daysInMonth(monthStr) { var p = monthStr.split('/'); return new Date(Number(p[1]), Number(p[0]), 0).getDate(); }
+function caHoursFromLabel(ngay, ca) { return scheduleHours(ngay, caBdFromLabel(ca), caKtFromLabel(ca)); }
+
+function getPayrollWorkbookData(monthStr) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), src = getPayrollAttendanceSource(ss, monthStr), schedSrc = payrollScheduleSource(ss, monthStr);
+  var m = String(monthStr).match(/^(0[1-9]|1[0-2])\/(\d{4})$/); if (!m) throw new Error('Tháng không hợp lệ. Dùng MM/yyyy.');
+  var shifts = {}, days = daysInMonth(monthStr), sourceLabel = src.locked ? 'Bản chốt' : 'Dữ liệu hiện tại', scheduleLabel = schedSrc.locked ? 'Lịch đã chốt' : 'Lịch hiện tại';
+  function add(ma, ten, ngay, ca, isException) { var k=[ma,ngay,ca,isException?'E':'L'].join('|'); if (!shifts[k]) shifts[k]={ma:ma,ten:ten,ngay:ngay,ca:ca,bd:'',kt:'',hasIn:false,hasOut:false,vao:'',ra:'',late:0,notes:[],absent:'',absentReason:'',isException:!!isException}; return shifts[k]; }
+  // expand scheduled shifts for every date of the selected month
+  if (schedSrc.sheet && schedSrc.sheet.getLastRow() >= 2) {
+    var lv=schedSrc.sheet.getDataRange().getDisplayValues(), nc=lv[0].length;
+    for (var i=1;i<lv.length;i++) { var ma=String(lv[i][0]||'').trim(); if(!ma)continue; var ten=String(lv[i][1]||''), dayCell=String(lv[i][nc>=7?3:2]||'').trim(), thu=nc>=7?String(lv[i][2]||'').trim():'', ca=String(lv[i][nc>=7?4:3]||'').trim(), bd=fmtTimeCell(lv[i][nc>=7?5:4]), kt=fmtTimeCell(lv[i][nc>=7?6:5]);
+      for(var d=1;d<=days;d++){var ngay=('0'+d).slice(-2)+'/'+m[1]+'/'+m[2]; if(thu&&!matchDay(thu,weekDay(parseVNDate(ngay))))continue; if(dayCell&&!matchDay(dayCell,weekDay(parseVNDate(ngay)))&&cellDay(dayCell)!==ngay)continue; if(!dayCell&&!thu)continue; var q=add(ma,ten,ngay,ca,false);q.bd=bd;q.kt=kt;}
+    }
+  }
+  if (src.sheet && src.sheet.getLastRow() >= 2) {
+    var cv=src.sheet.getDataRange().getDisplayValues(), raw=src.sheet.getDataRange().getValues();
+    for(var j=1;j<cv.length;j++){var ma2=String(cv[j][0]||'').trim();if(!ma2||thangCuaO(raw[j][2])!==monthStr)continue;var ngay2=ngayCuaO(raw[j][2]), type=String(cv[j][4]||''), ex=isExceptionType(type), r=add(ma2,String(cv[j][1]||''),ngay2,String(cv[j][3]||''),ex), ti=cellHM(cv[j][5]),to=cellHM(cv[j][6]),note=String(cv[j][8]||'');
+      if(type==='IN'||type==='EXCEPTION_IN'){r.hasIn=true;r.vao=ti||r.vao;r.late=Math.max(r.late,Number(cv[j][7]||0));} else if(type==='OUT'||type==='EXCEPTION_OUT'){r.hasOut=true;r.ra=to||r.ra;} else if(type==='VẮNG'){r.absent='Vắng';r.absentReason=note.split(' (')[0]||'Vắng';r.reportedLate=Number(cv[j][7]||0);} if(note)r.notes.push(note);
+    }
+  }
+  Object.keys(shifts).forEach(function(k){var r=shifts[k];if(!r.isException&&!r.hasIn&&!r.hasOut&&!r.absent&&isQuaGioCa(r.ngay,r.kt))r.absent='Vắng không báo';});
+  var annual={}, exMissed={}, details=[];
+  Object.keys(shifts).sort().forEach(function(k){var r=shifts[k], year=r.ngay.slice(6), ak=r.ma+'|'+year, ek=r.ma+'|'+monthStr, scheduled=scheduleHours(r.ngay,r.bd,r.kt)||caHoursFromLabel(r.ngay,r.ca), ev=evaluateAttendanceShift({hasIn:r.hasIn,hasOut:r.hasOut,vao:r.vao,ra:r.ra,ngay:r.ngay,lateMin:r.late,scheduleHours:scheduled,absent:r.absent,absentReason:r.absentReason,reportedLate:r.reportedLate,isException:r.isException},annual[ak]||0,exMissed[ek]||0);
+    if(!r.isException&&(r.hasIn!==r.hasOut)&&isQuotaDate(r.ngay))annual[ak]=(annual[ak]||0)+1;
+    if(r.isException&&(r.hasIn!==r.hasOut))exMissed[ek]=(exMissed[ek]||0)+1;
+    details.push({r:r,ev:ev,quota:annual[ak]||0,source:sourceLabel,schedule:scheduleLabel});
+  });
+  var roles={};getNhanVienList().forEach(function(n){roles[n.ma]=n.role;});
+  var byPerson={}, byWeek={}; details.forEach(function(x){var r=x.r,e=x.ev,pk=r.ma+'|'+r.ten;if(!byPerson[pk])byPerson[pk]={ma:r.ma,ten:r.ten,role:roles[r.ma]||'',actual:0,exempt:0,no:0,exceptions:0,quota:x.quota,kpi:[],leave:[],todo:[]};var p=byPerson[pk];p.quota=Math.max(p.quota,x.quota);if(e.result==='Tính theo giờ thực tế')p.actual+=Number(e.hours||0);else if(e.result==='Tính theo giờ lịch miễn trừ')p.exempt+=Number(e.hours||0);else if(e.result==='Không tính công')p.no++;else p.exceptions++;if(e.kpi==='Có')p.kpi.push(r.ngay+' — '+e.kpiReason);if(e.leave==='Trừ phép')p.leave.push(r.ngay+' — '+e.reason);if(e.result==='Chờ duyệt Exception'||e.result==='Không tính công')p.todo.push(r.ngay+' — '+e.reason);
+    var wk=r.ma+'|'+getWeekStart(r.ngay);if(!byWeek[wk])byWeek[wk]={ma:r.ma,ten:r.ten,start:getWeekStart(r.ngay),actual:0,exempt:0};if(e.result==='Tính theo giờ thực tế')byWeek[wk].actual+=Number(e.hours||0);if(e.result==='Tính theo giờ lịch miễn trừ')byWeek[wk].exempt+=Number(e.hours||0);
+  });
+  var weekRows=Object.keys(byWeek).sort().map(function(k){var w=byWeek[k], total=Math.round((w.actual+w.exempt)*100)/100, end=parseVNDate(w.start);end.setDate(end.getDate()+6);var endStr=('0'+end.getDate()).slice(-2)+'/'+('0'+(end.getMonth()+1)).slice(-2)+'/'+end.getFullYear(), state=total>46?'Vượt '+Math.round((total-46)*100)/100+' giờ':total===46?'Đủ 46 giờ':'Còn '+Math.round((46-total)*100)/100+' giờ', warn=total>=46?'Vượt 46 giờ — cần quản lý kiểm tra':total>=40?'Từ 40 giờ — liên hệ Ms. Vân Anh':'';return [w.ma,w.ten,w.start,endStr,w.actual,w.exempt,total,46,state,warn];});
+  var summaryRows=Object.keys(byPerson).sort().map(function(k){var p=byPerson[k], ws=weekRows.filter(function(w){return w[0]===p.ma;}),high=ws.reduce(function(a,w){return Math.max(a,Number(w[6]||0));},0),state=high>46?'Vượt '+Math.round((high-46)*100)/100+' giờ':high>=40?'Từ 40 giờ — kiểm tra lịch':'Bình thường';return[p.ma,p.ten,p.role,Math.round(p.actual*100)/100,Math.round(p.exempt*100)/100,p.no,p.exceptions,p.quota+'/4',high,state,p.kpi.join('; '),p.leave.join('; '),p.todo.join('; ')];});
+  var detailRows=details.map(function(x){var r=x.r,e=x.ev;return[r.ma,r.ten,r.ngay,r.isException?'Ca đột xuất':'Ca lịch',r.ca,r.vao,r.ra,e.hours,e.result,e.reason,e.kpi,e.kpiReason,e.leave,x.quota+'/4',r.isException?e.result:'',r.notes.join(' | '),x.source,x.schedule,'attendance-export-v3'];});
+  return {detailRows:detailRows,summaryRows:summaryRows,weekRows:weekRows};
+}
+
+function previewPayrollWorkbook(monthStr) { var d=getPayrollWorkbookData(monthStr); return {summaryHeaders:PAYROLL_SUMMARY_HEADERS,summaryRows:d.summaryRows,detailHeaders:PAYROLL_DETAIL_HEADERS,detailRows:d.detailRows,weekHeaders:PAYROLL_WEEK_HEADERS,weekRows:d.weekRows}; }
+function exportPayrollAttendanceCompactCsv(monthStr) { var d=getPayrollWorkbookData(monthStr), rows=[PAYROLL_DETAIL_HEADERS].concat(d.detailRows), csv=rows.map(function(row){return row.map(function(x){return '"'+String(x==null?'':x).replace(/"/g,'""')+'"';}).join(',');}).join('\r\n');return {filename:'Cham_cong_tinh_luong_gon_'+monthStr.replace('/','-')+'.csv',content:'\uFEFF'+csv}; }
+
+// Chốt bản copy để xem/xuất lại tháng cũ. Không xóa dữ liệu CHECK IN hiện hành.
+function chotThangAnToan(monthStr, replaceExisting) {
+  if (!/^\d\d\/\d{4}$/.test(String(monthStr||''))) return {ok:false,msg:'Tháng phải theo dạng MM/yyyy.'};
+  var ss=SpreadsheetApp.getActiveSpreadsheet(), tag=monthStr.replace('/','-'), specs=[{from:'CHECK IN',to:'CHECK IN - Tháng '+tag},{from:'LICHLAM',to:'LICHLAM - Tháng '+tag}];
+  for(var i=0;i<specs.length;i++) { var old=ss.getSheetByName(specs[i].to); if(old && !replaceExisting) return {ok:false,exists:true,msg:'Đã có bản chốt tháng '+monthStr+'. Chọn Chốt lại nếu muốn thay bằng dữ liệu hiện tại.'}; }
+  specs.forEach(function(s){var old=ss.getSheetByName(s.to), src=ss.getSheetByName(s.from);if(!src)return;if(old)ss.deleteSheet(old);var copy=src.copyTo(ss);copy.setName(s.to);copy.setTabColor('#B8A38B');copy.getRange(1,1).setNote('🔒 BẢN ĐÃ CHỐT — không sửa trực tiếp | Tháng: '+monthStr+' | Chốt lúc: '+fmtDT(new Date()));copy.setFrozenRows(1);});
+  return {ok:true,msg:'✅ Đã chốt chấm công và lịch làm tháng '+monthStr+'. Các báo cáo xuất lại tháng này sẽ dùng đúng bản đã chốt.'};
+}
+
+/* ---------- Quy tắc công/lương (chỉ đọc dữ liệu nguồn) ---------- */
+
+var MISSED_PUNCH_MESSAGE = 'Ú oà!!! Đi làm mà quên chấm công nè. Mình trừ KPI của bạn rồi. Đừng buồn nhé. Thương.';
+
+function hoursBetween(ngay, vao, ra) {
+  var a = parseVN(ngay + ' ' + vao), b = parseVN(ngay + ' ' + ra);
+  if (!a || !b) return '';
+  if (b < a) b += 86400000;
+  return Math.round((b - a) / 36000) / 100;
+}
+
+function scheduleHours(ngay, bd, kt) {
+  if (!bd || !kt) return 0;
+  return hoursBetween(ngay, bd, kt) || 0;
+}
+
+// annualMissedBefore = số lần quên ca lịch TRƯỚC ca đang xét (0-based).
+// exceptionMissedBefore = số Exception thiếu đầu chấm TRƯỚC ca đang xét trong tháng (0-based).
+function evaluateAttendanceShift(s, annualMissedBefore, exceptionMissedBefore) {
+  annualMissedBefore = Number(annualMissedBefore || 0);
+  exceptionMissedBefore = Number(exceptionMissedBefore || 0);
+  var no = { hours: '', result: 'Không tính công', reason: '', kpi: 'Không', kpiReason: '', leave: 'Không' };
+  if (s.isException) {
+    if (s.hasIn && s.hasOut) {
+      return { hours: hoursBetween(s.ngay, s.vao, s.ra), result: 'Chờ duyệt Exception', reason: 'Ca đột xuất chờ quản lý duyệt', kpi: 'Không', kpiReason: '', leave: 'Không' };
+    }
+    if (exceptionMissedBefore >= 3) {
+      no.reason = 'Exception thiếu chấm lần thứ ' + (exceptionMissedBefore + 1) + ' trong tháng — không tính giờ';
+      return no;
+    }
+    no.result = 'Chờ duyệt Exception';
+    no.reason = 'Chờ duyệt — thiếu ' + (s.hasIn ? 'CHECK OUT' : 'CHECK IN') + ' Exception (lần ' + (exceptionMissedBefore + 1) + '/3 trong tháng)';
+    return no;
+  }
+  if (s.absent) {
+    if (s.absent === 'Vắng không báo') {
+      no.reason = 'Nghỉ không báo'; no.kpi = 'Có'; no.kpiReason = 'Nghỉ không báo'; return no;
+    }
+    var reason = s.absentReason || 'Vắng';
+    var late = Number(s.reportedLate || 0);
+    if (late > 0) {
+      no.reason = reason + ' — báo vắng trễ ' + late + ' phút'; no.kpi = 'Có'; no.kpiReason = 'Báo vắng trễ ' + late + ' phút';
+      if (reason === 'Ốm / việc gia đình') no.leave = 'Trừ phép';
+      return no;
+    }
+    no.reason = reason + ' — báo trước';
+    if (reason === 'Ốm / việc gia đình') no.leave = 'Trừ phép';
+    return no;
+  }
+  if (s.hasIn && s.hasOut) {
+    var hours = hoursBetween(s.ngay, s.vao, s.ra);
+    var lateMin = Number(s.lateMin || 0);
+    return { hours: hours, result: 'Tính theo giờ thực tế', reason: lateMin ? 'Đi trễ ' + lateMin + ' phút' : 'Đã có mặt', kpi: lateMin ? 'Có' : 'Không', kpiReason: lateMin ? 'Đi trễ ' + lateMin + ' phút' : '', leave: 'Không' };
+  }
+  if (s.hasIn || s.hasOut) {
+    if (annualMissedBefore >= 4) {
+      no.reason = 'Thiếu ' + (s.hasIn ? 'OUT' : 'IN') + ' — đã dùng hết 4 lần miễn trừ'; no.kpi = 'Có'; no.kpiReason = MISSED_PUNCH_MESSAGE; return no;
+    }
+    return { hours: Number(s.scheduleHours || 0), result: 'Tính theo giờ lịch miễn trừ', reason: 'Miễn trừ quên ' + (s.hasIn ? 'OUT' : 'IN') + ' — lần ' + (annualMissedBefore + 1) + '/4', kpi: 'Không', kpiReason: '', leave: 'Không' };
+  }
+  no.reason = 'Chưa có dữ liệu chấm công';
+  return no;
+}
+
+function getWeekStart(ngay) {
+  var d = parseVNDate(ngay), dow = d.getDay(), delta = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + delta);
+  return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
 }
 
 /* ---------- Helpers ---------- */
@@ -1025,7 +1197,14 @@ function backupMotThang(prev) {
       }
     }
     
-    // 2. Xuất báo cáo tháng trước
+    // 2. Chốt cả lịch làm để tháng cũ không bị lệch theo lịch hiện tại.
+    var shLich = ss.getSheetByName('LICHLAM');
+    var newLichName = 'LICHLAM - Tháng ' + thangFile;
+    if (shLich && !ss.getSheetByName(newLichName)) {
+      shLich.copyTo(ss).setName(newLichName);
+    }
+
+    // 3. Xuất báo cáo tháng trước
     xuatBaoCaoSheet(thangStr);
 
     // 3. Xóa dữ liệu cũ trong sheet CHECK IN (giữ lại header)
@@ -1096,7 +1275,11 @@ function submitBaoVang(p) {
     treVang = Math.max(0, Math.round((nowTs - chuan) / 60000));
   }
 
-  var ghiChu = (p.lyDo || 'Phụ huynh xin nghỉ') + ' (Báo vắng từ xa: ' + fmtDT(gioBao) + ')';
+  var lyDo = p.lyDo || 'Phụ huynh xin nghỉ';
+  var baoTruoc = treVang === 0;
+  var ghiChu = lyDo + (baoTruoc && lyDo === 'Ốm / việc gia đình' ? ' | Trừ phép' : baoTruoc && lyDo === 'Phụ huynh xin nghỉ' ? ' | PH xin nghỉ — báo trước' : '') + ' (Báo vắng từ xa: ' + fmtDT(gioBao) + ')';
+  if (treVang > 0) ghiChu += ' | Báo vắng trễ ' + treVang + ' phút';
+  // Ốm/việc gia đình hoặc PH xin nghỉ báo trước không ảnh hưởng KPI; báo trễ vẫn có phút trễ để báo cáo xử lý.
 
   // Thứ tự cột: Mã, Tên, Ngày, Ca, Loại, Giờ in, Giờ out, Trễ, Ghi chú, Ảnh, Khoảng cách
   sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel, 'VẮNG', '', '', treVang, ghiChu, '', '']);

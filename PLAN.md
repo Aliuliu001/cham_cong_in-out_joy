@@ -1,40 +1,74 @@
-# PLAN MỚI: Hệ thống chấm công — 1 Sheet CHECK IN duy nhất
+# PLAN — Chấm công IN/OUT Joy
 
-## Quy tắc chung (áp dụng cho mọi tính năng sau này)
-- Mọi sự kiện (đi làm, ra về, báo vắng) đều là 1 dòng trong Sheet CHECK IN.
-- KHÔNG tạo thêm Sheet riêng cho từng tính năng (đã bỏ BAO_VANG).
-- Cột "Loại IN/OUT" chỉ có 3 giá trị: IN / OUT / VẮNG.
-- Giờ trễ = giờ bấm nút trừ thẳng giờ bắt đầu ca trong LICHLAM (không trừ sớm 15'/30' — user tự ghi giờ ca).
-- Giờ chấm = giờ bấm nút (IN/OUT/VẮNG), KHÔNG dùng giờ mở trang. Vị trí cũng lấy mới lúc bấm nút.
-- Vắng (có phép hay không báo) đều = 0 giờ làm.
-- Vắng không báo + VẮNG bấm muộn đều tính như 1 lần trễ để trừ KPI.
-- Ca thiếu chỉ hiện trên báo cáo + Lỗi tháng, KHÔNG tự ghi thêm dòng vào Sheet. Muốn duyệt phép bù thì quản lý ghi tay dòng VẮNG + chữ DUYỆT BÙ ở Ghi chú.
+## Phạm vi hệ thống
 
-## Cấu trúc Sheet CHECK IN (11 cột)
-Mã NV | Họ và tên | Ngày | Ca | Loại IN/OUT | Giờ check in | Giờ check out | Trễ (phút) | Ghi chú | Link ảnh | Khoảng cách
+Repo này là **nguồn chấm công gốc**: ghi CHECK IN/OUT, lịch, phép, KPI và xuất bằng chứng sang app Bảng lương. Repo này **không tính tiền lương**; app Bảng lương không được ghi ngược vào CHECK IN, LICHLAM hoặc KPI.
 
-## Việc đã xong
-- [x] Bỏ Sheet BAO_VANG, setup() không tạo nó nữa.
-- [x] Nút đỏ VẮNG trên web + ô chọn lý do, bấm ở nhà được (không cần GPS/ảnh).
-- [x] Chặn trùng: 1 người + 1 ngày + 1 ca chỉ 1 dòng (đã IN thì không VẮNG được, đã VẮNG thì không IN/VẮNG lại được).
-- [x] VẮNG bấm muộn tính trễ như đi trễ, cộng vào KPI.
-- [x] Báo cáo ngày: VẮNG hiện đúng chữ; ca hết giờ mà không bấm gì hiện đỏ "Vắng không báo".
-- [x] Báo cáo tháng: cột "Vắng có phép" + "Vắng không báo", dòng chi tiết từng ca vắng không báo.
-- [x] Sheet Lỗi tháng: có dòng Trễ IN, Vắng báo trễ, Vắng có phép, Vắng không báo, Quên OUT.
-- [x] Nút RA hiện đúng chữ CHECK OUT.
-- [x] Bỏ trừ sớm 15'/30' khi tính trễ.
+## Dữ liệu gốc
 
-## Xuất chấm công một chiều cho app Bảng lương (hoàn thành 2026-10-28)
-- Có 3 nút tại **Báo cáo tháng**: xem trước, tải CSV, tải Excel.
-- Dữ liệu chỉ đi theo chiều CHECK IN/LICHLAM → tệp tải xuống → app Bảng lương; không có chức năng tính tiền hoặc ghi ngược.
-- Tháng có sheet `CHECK IN - Tháng MM-yyyy` phải ưu tiên đọc bản đã chốt; tháng không có bản chốt đọc `CHECK IN`.
-- Một dòng tệp là một nhân viên + một ngày + một ca lịch, gồm đúng 12 cột đã thống nhất với app Bảng lương.
-- CSV là UTF-8 BOM; Excel có sheet `Cham cong` và cố định hàng tiêu đề.
+- `CHECK IN`: lưu mọi sự kiện chấm công.
+- `LICHLAM`: lịch ca hiện hành.
+- `DANHSACH`: mã, tên, vai trò.
+- `CHECK IN - Tháng MM-yyyy` + `LICHLAM - Tháng MM-yyyy`: bản đã chốt để xuất lại tháng cũ chính xác.
 
-## Việc còn lại
-- [ ] Sửa README cho khớp luật mới (đang ghi sai "GV trước 15'").
-- [ ] Test thực tế 1 buổi: bấm IN đúng giờ, IN trễ, VẮNG đúng giờ, VẮNG muộn, bỏ 1 ca không bấm → đối chiếu báo cáo ngày + tháng.
-- [ ] (Nếu cần) Trường hợp "sáng vắng không báo, chiều có mặt": máy đã tính ca sáng là Vắng không báo + trừ KPI — user xác nhận vậy là đủ hay muốn thêm gì.
+## Quy tắc chốt
 
----
-**Cập nhật:** 2026-09-23
+### Giờ làm và lịch tuần
+
+- Tuần là Thứ Hai → Chủ nhật.
+- Mốc hợp đồng giáo viên là 46 giờ/tuần.
+- Có đủ IN + OUT: giờ làm là OUT − IN thực tế. Đi trễ vẫn tính giờ thực tế, ra sớm chỉ tính tới giờ OUT.
+- Khi tổng giờ hợp lệ trong tuần đạt **40 giờ trở lên**, lúc CHECK IN chỉ cảnh báo, không chặn:
+  `Bạn hãy liên hệ Ms. Vân Anh. Lịch của bạn cần được kiểm tra lại.`
+- Trên 46 giờ: báo cáo ghi rõ vượt bao nhiêu giờ; không tự tính overtime/lương.
+
+### Quên chấm ca lịch
+
+- Mỗi năm dương lịch có 4 lần miễn trừ quên IN/OUT; tự reset ngày 01/01 hằng năm. Riêng quota 2026 bắt đầu tính lại từ 01/11/2026.
+- Lần 1–4: vẫn tính công theo **giờ lịch miễn trừ**, ghi rõ thiếu IN/OUT, ngày, ca và quota đã dùng.
+- Lần 5 trở đi: không tính công, trừ KPI và hiện:
+  `Ú oà!!! Đi làm mà quên chấm công nè. Mình trừ KPI của bạn rồi. Đừng buồn nhé. Thương.`
+- Lần chấm tiếp theo nhắc ca thiếu gần nhất và quota còn lại.
+- **Cần anh chốt trước khi code:** ca được miễn trừ chỉ có một dấu giờ thì không biết chính xác thời lượng thực tế. Đề xuất tính theo **đủ giờ lịch của ca**, ghi `Giờ lịch miễn trừ` để Bảng lương thấy rõ đây không phải giờ IN–OUT thực tế.
+
+### Vắng, phép và KPI
+
+- Ốm / việc gia đình hoặc Phụ huynh xin nghỉ, báo VẮNG **trước giờ ca**: không tính công, không trừ KPI; ghi đúng ngày/ca và `Trừ phép` hoặc `PH xin nghỉ — báo trước`.
+- Các lý do trên nhưng báo sau giờ ca: không tính công, ghi số phút báo trễ và ảnh hưởng KPI.
+- Có lịch nhưng không IN, OUT hoặc VẮNG: `Nghỉ không báo`, không tính công, trừ KPI.
+- `Lịch trống` không phải VẮNG và không tạo ca để chấm.
+
+### Ca đột xuất — Exception
+
+- Có nút `🟣 CHECK IN CA ĐỘT XUẤT` và `🟣 CHECK OUT CA ĐỘT XUẤT`.
+- Bắt buộc chọn lý do, ảnh và GPS; số giờ khi đủ hai đầu là OUT − IN.
+- Exception đủ IN/OUT: `Chờ duyệt Exception`, không tự cộng vào lương hay tổng 46 giờ.
+- Exception thiếu một đầu: `Chờ duyệt — thiếu CHECK IN/OUT Exception`.
+- Trong **một tháng**, mỗi nhân viên có tối đa 3 Exception thiếu IN hoặc OUT được `Chờ duyệt`; từ Exception thiếu đầu thứ 4 trở đi: **không tính giờ**. Không cộng các trường hợp này vào 4 lần miễn trừ của ca lịch.
+- Không cho mở hai Exception, không cho OUT nếu không có IN tương ứng, và không cộng đôi giờ nếu trùng ca lịch.
+
+### Chốt tháng
+
+- Nút `🔒 Chốt tháng MM/yyyy` tạo hai bản snapshot CHECK IN và LICHLAM, có dòng đầu `🔒 BẢN ĐÃ CHỐT — không sửa trực tiếp`.
+- Nếu có bản chốt: quản lý chọn `Giữ bản đã chốt` hoặc `Chốt lại theo dữ liệu hiện tại`; không tự ghi đè.
+- Xuất/thống kê tháng cũ ưu tiên cả hai bản chốt. Thiếu LICHLAM snapshot thì cảnh báo vàng đang dùng lịch hiện tại.
+
+## Output cho app Bảng lương
+
+Excel `Cham_cong_tinh_luong_MM-YYYY.xlsx` gồm:
+
+1. `Tong hop GV`: tổng giờ, giờ miễn trừ, quota, giờ tuần cao nhất, mốc 46 giờ, **ngày cần xem KPI**, **ngày trừ phép**, Exception chờ duyệt.
+2. `Chi tiet ca`: từng ngày/ca, IN/OUT, giờ, kết quả công, lý do, ảnh hưởng KPI/phép, quota, trạng thái Exception, nguồn dữ liệu.
+3. `Gio tuan`: giáo viên + tuần, giờ hợp lệ, giờ miễn trừ, mốc 46, còn lại/vượt và cảnh báo 40/46 giờ.
+
+Giữ CSV 12 cột cũ để tương thích; thêm CSV gọn theo `Chi tiet ca`, luôn UTF-8 BOM.
+
+## Việc đã hoàn thành
+
+- [x] 1 sheet CHECK IN cho IN / OUT / VẮNG.
+- [x] Báo cáo ngày/tháng và phát hiện Vắng không báo.
+- [x] Xuất CSV/XLSX một chiều cho Bảng lương, ưu tiên CHECK IN snapshot nếu có.
+
+## Việc tiếp theo
+
+Xem `TASKS.md` và `context.md`.

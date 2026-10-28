@@ -61,11 +61,12 @@
     <div id="kqThang"></div>
     <div id="btnXuat" style="display:none; margin-top:12px; text-align:center;">
       <button class="go" onclick="xuatSheet()" style="background:#1a7a33;">📥 Xuất về Sheet BAOCAO_THANG</button>
+      <button class="go" onclick="chotThang()" style="background:#7b5b3d;">🔒 Chốt tháng này</button>
     </div>
     <section style="margin-top:22px;padding:16px;border:1px solid #e5ddd2;border-radius:14px;background:#fffdf9">
       <h2 style="margin:0 0 8px;color:#5C4A3A;font-size:18px">📤 Xuất chấm công để tính lương</h2>
       <p style="margin:0 0 12px;color:#666">Dùng tháng đã chọn ở trên. Chỉ đọc CHECK IN và LICHLAM; không sửa dữ liệu chấm công hay tính tiền lương.</p>
-      <div class="row"><button class="go" onclick="xemBangLuong()">👀 Xem trước dữ liệu lương</button><button class="go" onclick="taiBangLuong('csv')">⬇️ Tải CSV</button><button class="go" onclick="taiBangLuong('xlsx')">⬇️ Tải Excel</button></div>
+      <div class="row"><button class="go" onclick="xemBangLuong()">👀 Xem trước dữ liệu lương</button><button class="go" onclick="taiBangLuong('csv')">⬇️ Tải CSV cũ</button><button class="go" onclick="taiBangLuong('compact')">⬇️ Tải bảng gọn</button><button class="go" onclick="taiBangLuong('xlsx')">⬇️ Tải Excel</button></div>
       <div id="previewLuong"></div>
     </section>
   </div>
@@ -213,21 +214,31 @@ function xemThang() {
   }).withFailureHandler(loi).getBaoCaoThangTatCa(th);
 }
 function escLuong(x) { return String(x == null ? '' : x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function bangLuongHtml(title, headers, rows) {
+  var h='<h3 style="color:#5C4A3A">'+escLuong(title)+'</h3><div style="overflow:auto;max-height:360px"><table><thead><tr>';
+  headers.forEach(function(x){h+='<th>'+escLuong(x)+'</th>';});h+='</tr></thead><tbody>';
+  rows.forEach(function(row){h+='<tr>';row.forEach(function(x){h+='<td>'+escLuong(x)+'</td>';});h+='</tr>';});return h+'</tbody></table></div>';
+}
 function xemBangLuong() {
   var box=document.getElementById('previewLuong'); box.textContent='Đang tải...';
   google.script.run.withSuccessHandler(function(data) {
-    var h='<div style="overflow:auto;max-height:480px"><table><thead><tr>';
-    data.headers.forEach(function(x){h+='<th>'+escLuong(x)+'</th>';}); h+='</tr></thead><tbody>';
-    data.rows.forEach(function(row){h+='<tr>';row.forEach(function(x){h+='<td>'+escLuong(x)+'</td>';});h+='</tr>';});
-    box.innerHTML=h+'</tbody></table></div><p>'+data.rows.length+' ca làm việc</p>';
-  }).withFailureHandler(function(e){box.textContent='Không tải được: '+(e&&e.message||'Lỗi không rõ');}).previewPayrollAttendance(document.getElementById('thang').value.trim()||thangNay());
+    box.innerHTML=bangLuongHtml('⚠️ Tổng hợp giáo viên',data.summaryHeaders,data.summaryRows)+bangLuongHtml('🕒 Giờ giáo viên theo tuần',data.weekHeaders,data.weekRows)+bangLuongHtml('✅ Chi tiết ca',data.detailHeaders,data.detailRows);
+  }).withFailureHandler(function(e){box.textContent='Không tải được: '+(e&&e.message||'Lỗi không rõ');}).previewPayrollWorkbook(document.getElementById('thang').value.trim()||thangNay());
 }
 function taiBangLuong(kind) {
   var th=document.getElementById('thang').value.trim()||thangNay();
-  if(kind==='csv') google.script.run.withSuccessHandler(function(f){
+  if(kind==='csv' || kind==='compact') google.script.run.withSuccessHandler(function(f){
     var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([f.content],{type:'text/csv;charset=utf-8'}));a.download=f.filename;a.click();URL.revokeObjectURL(a.href);
-  }).withFailureHandler(function(e){alert('Không tải được: '+(e&&e.message||'Lỗi không rõ'));}).exportPayrollAttendanceCsv(th);
+  }).withFailureHandler(function(e){alert('Không tải được: '+(e&&e.message||'Lỗi không rõ'));})[kind==='compact'?'exportPayrollAttendanceCompactCsv':'exportPayrollAttendanceCsv'](th);
   else google.script.run.withSuccessHandler(function(f){var a=document.createElement('a');a.href=f.url;a.download=f.filename;a.target='_blank';a.click();}).withFailureHandler(function(e){alert('Không tạo được Excel: '+(e&&e.message||'Lỗi không rõ'));}).exportPayrollAttendanceXlsx(th);
+}
+function chotThang() {
+  var th=document.getElementById('thang').value.trim()||thangNay();
+  google.script.run.withSuccessHandler(function(r){
+    if(r.ok) alert(r.msg);
+    else if(r.exists && confirm(r.msg+'\n\nBấm OK để chốt lại theo dữ liệu hiện tại, Cancel để giữ bản cũ.')) google.script.run.withSuccessHandler(function(x){alert(x.msg);}).chotThangAnToan(th,true);
+    else alert(r.msg);
+  }).withFailureHandler(function(e){alert('Không chốt được: '+(e&&e.message||'Lỗi không rõ'));}).chotThangAnToan(th,false);
 }
 function xuatSheet() {
   var th = document.getElementById('thang').value.trim() || thangNay();

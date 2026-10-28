@@ -84,4 +84,38 @@ assert.equal(byId('NV006')[11], 'DUYỆT BÙ: ốm');
 assert.deepEqual(Array.from(byId('NV007').slice(6, 11)), ['Vắng không báo', 0, 'Vắng không báo', '', 'Không']);
 assert.match(byId('NV007')[11], /Vắng không báo/);
 
-console.log('PASS: archived/current source selection and all mandatory payroll-export cases');
+// New payroll contract: actual hours, 4 annual exemptions, leave and Exception.
+assert.equal(typeof runExport, 'function');
+const sandboxForRules = {};
+(function loadRules() {
+  const sandbox = { console, Date, Math, Number, String, Object, Array, RegExp, JSON, Error };
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync('Code.gs', 'utf8'), sandbox);
+  sandboxForRules.evaluateAttendanceShift = sandbox.evaluateAttendanceShift;
+  sandboxForRules.getWeekStart = sandbox.getWeekStart;
+})();
+assert.equal(typeof sandboxForRules.evaluateAttendanceShift, 'function', 'evaluateAttendanceShift must be exported');
+let ev = sandboxForRules.evaluateAttendanceShift({hasIn:true, hasOut:true, vao:'08:10', ra:'11:00', ngay:'05/11/2026', lateMin:10, scheduleHours:4}, 0);
+assert.deepEqual(JSON.parse(JSON.stringify(ev)), {hours:2.83, result:'Tính theo giờ thực tế', reason:'Đi trễ 10 phút', kpi:'Có', kpiReason:'Đi trễ 10 phút', leave:'Không'});
+ev = sandboxForRules.evaluateAttendanceShift({hasIn:true, hasOut:false, ngay:'05/11/2026', scheduleHours:4}, 1);
+assert.equal(ev.result, 'Tính theo giờ lịch miễn trừ');
+assert.equal(ev.hours, 4);
+assert.match(ev.reason, /Miễn trừ.*2\/4/);
+ev = sandboxForRules.evaluateAttendanceShift({hasIn:false, hasOut:true, ngay:'05/11/2026', scheduleHours:4}, 4);
+assert.equal(ev.result, 'Không tính công');
+assert.equal(ev.kpi, 'Có');
+assert.match(ev.kpiReason, /Ú oà!!!/);
+ev = sandboxForRules.evaluateAttendanceShift({absent:'Vắng', absentReason:'Ốm / việc gia đình', reportedLate:0}, 0);
+assert.deepEqual(JSON.parse(JSON.stringify(ev)), {hours:'', result:'Không tính công', reason:'Ốm / việc gia đình — báo trước', kpi:'Không', kpiReason:'', leave:'Trừ phép'});
+ev = sandboxForRules.evaluateAttendanceShift({absent:'Vắng không báo'}, 0);
+assert.equal(ev.kpi, 'Có');
+assert.equal(ev.kpiReason, 'Nghỉ không báo');
+ev = sandboxForRules.evaluateAttendanceShift({isException:true, hasIn:true, hasOut:true, vao:'08:10', ra:'11:00', ngay:'05/11/2026'}, 0, 0);
+assert.equal(ev.result, 'Chờ duyệt Exception');
+assert.equal(ev.hours, 2.83);
+ev = sandboxForRules.evaluateAttendanceShift({isException:true, hasIn:true, hasOut:false, ngay:'05/11/2026'}, 0, 3);
+assert.equal(ev.result, 'Không tính công');
+assert.match(ev.reason, /lần thứ 4/);
+assert.equal(sandboxForRules.getWeekStart('05/11/2026'), '02/11/2026');
+
+console.log('PASS: archived/current source selection and payroll attendance rules');
