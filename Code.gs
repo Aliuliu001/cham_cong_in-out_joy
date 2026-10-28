@@ -685,6 +685,93 @@ function testGioLam() {
   Logger.log('gioLam som = ' + h2 + ' (ky vong 2)');
 }
 
+/* ---------- Xuất chấm công tính lương (chỉ đọc CHECK IN/LICHLAM) ---------- */
+var PAYROLL_EXPORT_HEADERS = ['Mã NV', 'Họ tên', 'Ngày', 'Ca lịch', 'Giờ VÀO', 'Giờ RA', 'Loại', 'Trễ (phút)', 'Trạng thái ca', 'Số giờ thực tế', 'Đủ ca theo lịch', 'Ghi chú'];
+
+function getPayrollAttendanceRows(monthStr) {
+  var m = String(monthStr || '').match(/^(0[1-9]|1[0-2])\/(\d{4})$/);
+  if (!m) throw new Error('Tháng không hợp lệ. Dùng định dạng MM/yyyy.');
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName('CHECK IN');
+  var shL = ss.getSheetByName('LICHLAM');
+  var result = {};
+  var days = new Date(Number(m[2]), Number(m[1]), 0).getDate();
+  var dateKeys = [];
+  for (var d = 1; d <= days; d++) dateKeys.push(('0' + d).slice(-2) + '/' + m[1] + '/' + m[2]);
+  function add(ma, ten, ngay, ca) {
+    var key = [ma, ngay, ca].join('|');
+    if (!result[key]) result[key] = { ma: ma, ten: ten, ngay: ngay, ca: ca, vao: '', ra: '', loai: [], tre: 0, notes: [], hasIn: false, hasOut: false, absent: '' };
+    return result[key];
+  }
+  if (shL && shL.getLastRow() >= 2) {
+    var lv = shL.getDataRange().getDisplayValues(), nc = lv[0].length;
+    for (var i = 1; i < lv.length; i++) {
+      var ma = String(lv[i][0] || '').trim(); if (!ma) continue;
+      var ten = String(lv[i][1] || ''), ca = String(lv[i][nc >= 7 ? 4 : 3] || '').trim();
+      var ktLich = fmtTimeCell(lv[i][nc >= 7 ? 6 : 5]);
+      var dayCell = String(lv[i][nc >= 7 ? 3 : 2] || '').trim();
+      var thu = nc >= 7 ? String(lv[i][2] || '').trim() : '';
+      dateKeys.forEach(function(day) {
+        if (thu && !matchDay(thu, weekDay(parseVNDate(day)))) return;
+        if (dayCell && !matchDay(dayCell, weekDay(parseVNDate(day))) && cellDay(dayCell) !== day) return;
+        if (!dayCell && !thu) return;
+        add(ma, ten, day, ca).kt = ktLich;
+      });
+    }
+  }
+  if (sh && sh.getLastRow() >= 2) {
+    var cv = sh.getDataRange().getDisplayValues(), raw = sh.getDataRange().getValues();
+    for (var j = 1; j < cv.length; j++) {
+      var ma2 = String(cv[j][0] || '').trim(); if (!ma2) continue;
+      var day2 = ngayCuaO(raw[j][2]); if (thangCuaO(raw[j][2]) !== monthStr) continue;
+      var ca2 = String(cv[j][3] || '').trim(), r = add(ma2, String(cv[j][1] || ''), day2, ca2);
+      var type = String(cv[j][4] || '').trim(), timeIn = fmtGioHMS(cv[j][5]), timeOut = fmtGioHMS(cv[j][6]);
+      if (type === 'IN') { r.hasIn = true; if (timeIn && (!r.vao || timeIn < r.vao)) r.vao = timeIn; r.tre = Math.max(r.tre, Number(cv[j][7] || 0)); }
+      else if (type === 'OUT') { r.hasOut = true; if (timeOut && (!r.ra || timeOut > r.ra)) r.ra = timeOut; }
+      else if (type === 'VẮNG') { r.absent = String(cv[j][8] || '').toLowerCase().indexOf('không báo') >= 0 ? 'Vắng không báo' : 'Vắng'; r.tre = Math.max(r.tre, Number(cv[j][7] || 0)); }
+      if (cv[j][8]) r.notes.push(String(cv[j][8]));
+    }
+  }
+  // Xác định vắng không báo bằng lịch nhưng không có IN/VẮNG, chỉ cho ngày đã hết ca.
+  Object.keys(result).forEach(function(key) {
+    var r = result[key];
+    if (!r.hasIn && !r.hasOut && !r.absent && isQuaGioCa(r.ngay, r.kt || caKtFromLabel(r.ca))) r.absent = 'Vắng không báo';
+  });
+  var rows = Object.keys(result).map(function(key) {
+    var r = result[key], status, type, hours = '';
+    if (r.absent) { status = r.absent; type = r.absent; }
+    else if (!r.hasIn) { status = 'Thiếu IN'; type = r.hasOut ? 'OUT' : ''; }
+    else if (!r.hasOut) { status = 'Thiếu OUT'; type = 'IN'; }
+    else { status = 'Đủ ca'; type = 'IN/OUT'; }
+    if (r.vao && r.ra) {
+      var a = parseVN(r.ngay + ' ' + r.vao), b = parseVN(r.ngay + ' ' + r.ra);
+      if (a && b) { if (b < a) b += 86400000; hours = Math.round((b - a) / 36000) / 100; }
+    }
+    var qualified = status === 'Đủ ca' && r.tre < 20 ? 'Có' : 'Không';
+    return [r.ma, r.ten, r.ngay, r.ca, r.vao, r.ra, type, r.tre || 0, status, hours, qualified, r.notes.join(' | ')];
+  });
+  rows.sort(function(a,b) { var pa=a[2].split('/'),pb=b[2].split('/'); return new Date(pa[2],pa[1]-1,pa[0])-new Date(pb[2],pb[1]-1,pb[0]) || String(a[0]).localeCompare(String(b[0])) || String(a[3]).localeCompare(String(b[3])); });
+  return rows;
+}
+
+function previewPayrollAttendance(monthStr) { return { headers: PAYROLL_EXPORT_HEADERS, rows: getPayrollAttendanceRows(monthStr) }; }
+
+function exportPayrollAttendanceCsv(monthStr) {
+  var rows = [PAYROLL_EXPORT_HEADERS].concat(getPayrollAttendanceRows(monthStr));
+  var csv = rows.map(function(row) { return row.map(function(x) { return '"' + String(x == null ? '' : x).replace(/"/g, '""'); }).join(','); }).join('\r\n');
+  return { filename: 'Cham_cong_tinh_luong_' + monthStr.replace('/', '-') + '.csv', content: '\uFEFF' + csv };
+}
+
+function exportPayrollAttendanceXlsx(monthStr) {
+  var rows = [PAYROLL_EXPORT_HEADERS].concat(getPayrollAttendanceRows(monthStr));
+  var book = SpreadsheetApp.create('Cham cong tinh luong ' + monthStr);
+  var sheet = book.getSheets()[0]; sheet.setName('Cham cong');
+  sheet.getRange(1, 1, rows.length, PAYROLL_EXPORT_HEADERS.length).setValues(rows);
+  sheet.setFrozenRows(1);
+  var url = 'https://docs.google.com/spreadsheets/d/' + book.getId() + '/export?format=xlsx';
+  return { url: url, filename: 'Cham_cong_tinh_luong_' + monthStr.replace('/', '-') + '.xlsx' };
+}
+
 /* ---------- Helpers ---------- */
 
 function haversine(lat1, lon1, lat2, lon2) {
