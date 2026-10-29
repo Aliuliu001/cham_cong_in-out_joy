@@ -98,9 +98,9 @@ assert.equal(typeof sandboxForRules.evaluateAttendanceShift, 'function', 'evalua
 let ev = sandboxForRules.evaluateAttendanceShift({hasIn:true, hasOut:true, vao:'08:10', ra:'11:00', ngay:'05/11/2026', lateMin:10, scheduleHours:4}, 0);
 assert.deepEqual(JSON.parse(JSON.stringify(ev)), {hours:2.83, result:'Tính theo giờ thực tế', reason:'Đi trễ 10 phút', kpi:'Có', kpiReason:'Đi trễ 10 phút', leave:'Không'});
 ev = sandboxForRules.evaluateAttendanceShift({hasIn:true, hasOut:false, ngay:'05/11/2026', scheduleHours:4}, 1);
-assert.equal(ev.result, 'Tính theo giờ lịch miễn trừ');
-assert.equal(ev.hours, 4);
-assert.match(ev.reason, /Miễn trừ.*2\/4/);
+assert.equal(ev.result, 'Không tính công');
+assert.equal(ev.hours, '');
+assert.match(ev.reason, /2\/4, chờ quản lý kiểm tra/);
 ev = sandboxForRules.evaluateAttendanceShift({hasIn:false, hasOut:true, ngay:'05/11/2026', scheduleHours:4}, 4);
 assert.equal(ev.result, 'Không tính công');
 assert.equal(ev.kpi, 'Có');

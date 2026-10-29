@@ -11,7 +11,7 @@
 ## Quyết định không được làm sai
 
 1. Đủ IN + OUT: tính OUT − IN thực tế, trễ vẫn tính giờ; ra sớm tính đến giờ OUT.
-2. Ca lịch quên IN/OUT: 4 lần miễn trừ/năm, vẫn tính theo giờ lịch; lần 5 trong năm không tính công + trừ KPI. Reset 01/01; riêng 2026 reset từ 01/11.
+2. Ca lịch quên IN/OUT: 4 lần miễn trừ/năm chỉ để quản lý check tay; vẫn không tự tính công vì thiếu dấu. Lần 5 trong năm vẫn không tính công + chắc chắn trừ KPI. Reset 01/01; riêng 2026 reset từ 01/11.
 3. Vắng Ốm/việc gia đình hoặc PH xin nghỉ trước giờ ca: không công, không KPI, ghi Trừ phép/ghi chú. Báo sau giờ ca: KPI. Không báo: Nghỉ không báo + KPI.
 4. Tuần T2–CN; >=40 giờ cảnh báo liên hệ Ms. Vân Anh, >46 giờ cảnh báo báo cáo, không chặn chấm/không tự overtime.
 5. Exception: bắt buộc lý do, GPS, ảnh; đủ dấu = Chờ duyệt, không tự cộng giờ/lương. Trong tháng, Exception thiếu đầu 1–3 chờ duyệt; từ lần 4 thiếu đầu không tính giờ. Không dùng quota 4 lần của ca lịch.

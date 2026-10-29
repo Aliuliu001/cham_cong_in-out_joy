@@ -25,8 +25,8 @@ Repo này là **nguồn chấm công gốc**: ghi CHECK IN/OUT, lịch, phép, K
 ### Quên chấm ca lịch
 
 - Mỗi năm dương lịch có 4 lần miễn trừ quên IN/OUT; tự reset ngày 01/01 hằng năm. Riêng quota 2026 bắt đầu tính lại từ 01/11/2026.
-- Lần 1–4: vẫn tính công theo **giờ lịch miễn trừ**, ghi rõ thiếu IN/OUT, ngày, ca và quota đã dùng.
-- Lần 5 trở đi: không tính công, trừ KPI và hiện:
+- Lần 1–4: vẫn **không tự tính công** vì thiếu một đầu chấm; ghi rõ thiếu IN/OUT, ngày, ca, quota đã dùng và `Chờ quản lý kiểm tra`.
+- Lần 5 trở đi: vẫn không tính công, đồng thời trừ KPI và hiện:
   `Ú oà!!! Đi làm mà quên chấm công nè. Mình trừ KPI của bạn rồi. Đừng buồn nhé. Thương.`
 - Lần chấm tiếp theo nhắc ca thiếu gần nhất và quota còn lại.
 - **Cần anh chốt trước khi code:** ca được miễn trừ chỉ có một dấu giờ thì không biết chính xác thời lượng thực tế. Đề xuất tính theo **đủ giờ lịch của ca**, ghi `Giờ lịch miễn trừ` để Bảng lương thấy rõ đây không phải giờ IN–OUT thực tế.

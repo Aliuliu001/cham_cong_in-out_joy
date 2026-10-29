@@ -29,8 +29,8 @@ Web chấm công QR cho điện thoại, dùng Google Apps Script + Google Sheet
 
 ### Quên chấm ca lịch
 
-- Mỗi năm có 4 lần miễn trừ quên IN/OUT. Lần 1–4 vẫn tính theo giờ lịch của ca nhưng ghi rõ là miễn trừ.
-- Từ lần 5: không tính công và trừ KPI.
+- Mỗi năm có 4 lần miễn trừ quên IN/OUT. Lần 1–4 vẫn không tự tính công vì thiếu một đầu chấm; file ghi rõ ngày/ca, quota đã dùng và `Chờ quản lý kiểm tra`.
+- Từ lần 5: vẫn không tính công và chắc chắn trừ KPI.
 - Quota tự reset ngày 01/01; riêng 2026 bắt đầu tính lại từ 01/11/2026.
 
 ### Vắng

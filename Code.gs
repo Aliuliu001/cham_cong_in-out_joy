@@ -953,7 +953,7 @@ function evaluateAttendanceShift(s, annualMissedBefore, exceptionMissedBefore) {
     if (annualMissedBefore >= 4) {
       no.reason = 'Thiếu ' + (s.hasIn ? 'OUT' : 'IN') + ' — đã dùng hết 4 lần miễn trừ'; no.kpi = 'Có'; no.kpiReason = MISSED_PUNCH_MESSAGE; return no;
     }
-    return { hours: Number(s.scheduleHours || 0), result: 'Tính theo giờ lịch miễn trừ', reason: 'Miễn trừ quên ' + (s.hasIn ? 'OUT' : 'IN') + ' — lần ' + (annualMissedBefore + 1) + '/4', kpi: 'Không', kpiReason: '', leave: 'Không' };
+    return { hours: '', result: 'Không tính công', reason: 'Thiếu ' + (s.hasIn ? 'OUT' : 'IN') + ' — lần ' + (annualMissedBefore + 1) + '/4, chờ quản lý kiểm tra', kpi: 'Không', kpiReason: '', leave: 'Không' };
   }
   no.reason = 'Chưa có dữ liệu chấm công';
   return no;

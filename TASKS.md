@@ -17,7 +17,7 @@
 ### 2. Tính từng ca, miễn trừ và KPI
 - [ ] Viết test RED: IN/OUT đầy đủ, trễ, ra sớm, quên IN, quên OUT, lần 1–4, lần 5, reset qua năm.
 - [ ] Ca đủ IN/OUT tính theo giờ thực tế; trễ không mất giờ.
-- [ ] Ca lịch thiếu IN/OUT lần 1–4 tính theo giờ lịch miễn trừ; lần 5 không tính công + KPI + câu nhắc đã chốt.
+- [ ] Ca lịch thiếu IN/OUT lần 1–4 không tự tính công, ghi quota + Chờ quản lý kiểm tra; lần 5 vẫn không công + KPI + câu nhắc đã chốt.
 - [ ] Popup lần chấm sau: ca thiếu gần nhất + quota còn lại.
 
 ### 3. Kiểm soát giờ giáo viên
