@@ -57,6 +57,12 @@ Các bản này dùng để xuất lại tháng cũ mà không bị thay đổi 
 
 File Excel dự kiến cho Bảng lương có 3 sheet: `Tong hop GV`, `Chi tiet ca`, `Gio tuan`; các ngày trừ KPI/trừ phép đều ghi rõ ngày, ca và lý do. CSV 12 cột hiện có vẫn giữ để tương thích.
 
+## Nhắc lịch làm việc qua Telegram (chưa bật trên Apps Script)
+
+Bot @joy_victini_bot gửi lịch ngày mai lúc khoảng 21:00 giờ Việt Nam, đọc từ `LICHLAM`. Bot này dùng nhóm và token RIÊNG, không dùng topic Check IN/OUT. Một ngày chỉ gửi một lần; nếu chưa có lịch, tin ghi rõ chưa xếp ca. Apps Script time trigger `atHour(21)` chạy trong khoảng 21:00–22:00, không bảo đảm đúng phút 21:00.
+
+Để bật khi đã có ID nhóm: trong Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, tự nhập `LICH_LAM_BOT_TOKEN` (mã mới sau `/revoke`) và `LICH_LAM_CHAT_ID` (ID nhóm Lịch làm việc); nếu có topic, thêm `LICH_LAM_THREAD_ID`. Không gửi token qua chat, không ghi vào code/GitHub. Sau khi dán Code.gs và lưu, chạy `setupLichLamTrigger()` một lần và cấp quyền, rồi kiểm tra nhật ký/tin trong nhóm. Thiếu token hoặc ID nhóm thì hàm không bật trigger; push GitHub một mình không bật bot.
+
 ## Cài và triển khai
 
 1. Tạo Google Sheets → **Tiện ích mở rộng** → **Apps Script**.

@@ -52,6 +52,69 @@ function testGuiTin() {
   return guiTinTelegram('🤖 Test từ Apps Script: ' + new Date());
 }
 
+/* ---------- Lịch làm việc: 21:00 hôm trước, nhóm riêng ---------- */
+// Cấu hình trong Script Properties: LICH_LAM_BOT_TOKEN, LICH_LAM_CHAT_ID;
+// nếu nhóm có topic, thêm LICH_LAM_THREAD_ID. Không dùng bot/topic Check IN/OUT.
+function formatTomorrowWorkSchedule(now) {
+  now = now || new Date();
+  var target = new Date(now.getTime());
+  target.setDate(target.getDate() + 1);
+  var dateText = Utilities.formatDate(target, TZ, 'dd/MM/yyyy');
+  var dayCode = weekDay(target);
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('LICHLAM');
+  if (!sh) throw new Error('Không tìm thấy LICHLAM.');
+  var v = sh.getDataRange().getDisplayValues(), nc = v.length ? v[0].length : 0;
+  var items = [];
+  for (var i = 1; i < v.length; i++) {
+    var r = v[i];
+    if (!String(r[0] || '').trim()) continue;
+    var thu = nc >= 7 ? String(r[2] || '').trim() : '';
+    var day = String(r[nc >= 7 ? 3 : 2] || '').trim();
+    if (thu && !matchDay(thu, dayCode)) continue;
+    if (!day || (!matchDay(day, dayCode) && cellDay(day) !== dateText)) continue;
+    var ca = String(r[nc >= 7 ? 4 : 3] || '').trim();
+    var bd = fmtTimeCell(r[nc >= 7 ? 5 : 4]);
+    var kt = fmtTimeCell(r[nc >= 7 ? 6 : 5]);
+    items.push({ten:String(r[1] || r[0]).trim(), ca:ca, bd:bd, kt:kt});
+  }
+  items.sort(function(a, b) { return a.bd.localeCompare(b.bd) || a.ten.localeCompare(b.ten); });
+  return '📅 LỊCH LÀM VIỆC ' + dateText + '\n' +
+    (items.length ? items.map(function(x) { return '• ' + x.bd + '–' + x.kt + ' | ' + x.ten + ' | ' + x.ca; }).join('\n') : 'Hôm nay không có ca đã xếp.');
+}
+
+function sendTomorrowWorkSchedule(now) {
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty('LICH_LAM_BOT_TOKEN');
+  var chat = props.getProperty('LICH_LAM_CHAT_ID');
+  if (!token || !chat) { Logger.log('Chưa có LICH_LAM_BOT_TOKEN/LICH_LAM_CHAT_ID'); return {ok:false, msg:'Thiếu cấu hình bot hoặc nhóm lịch.'}; }
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return {ok:false, msg:'Đang gửi lịch ở phiên khác.'};
+  try {
+    var current = now || new Date(), next = new Date(current.getTime());
+    next.setDate(next.getDate() + 1);
+    var key = 'LICH_LAM_SENT_' + Utilities.formatDate(next, TZ, 'dd/MM/yyyy');
+    if (props.getProperty(key)) return {ok:true, skipped:true, msg:'Lịch ngày mai đã gửi.'};
+    var payload = {chat_id:chat, text:formatTomorrowWorkSchedule(current)};
+    var thread = props.getProperty('LICH_LAM_THREAD_ID');
+    if (thread) payload.message_thread_id = thread;
+    var resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {method:'post', payload:payload, muteHttpExceptions:true});
+    var body = JSON.parse(resp.getContentText());
+    if (resp.getResponseCode() !== 200 || !body.ok) { Logger.log('Không gửi được lịch: ' + resp.getResponseCode()); return {ok:false, msg:'Telegram chưa nhận lịch; kiểm tra bot và ID nhóm.'}; }
+    props.setProperty(key, 'sent');
+    return {ok:true, msg:'Đã gửi lịch ngày ' + Utilities.formatDate(next, TZ, 'dd/MM/yyyy')};
+  } catch(e) { Logger.log('Lỗi gửi lịch: ' + e.message); return {ok:false, msg:e.message}; }
+  finally { lock.releaseLock(); }
+}
+
+function setupLichLamTrigger() {
+  var props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('LICH_LAM_BOT_TOKEN') || !props.getProperty('LICH_LAM_CHAT_ID'))
+    return {ok:false, msg:'Nhập token và ID nhóm vào Script Properties trước.'};
+  var found = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'sendTomorrowWorkSchedule'; });
+  if (!found) ScriptApp.newTrigger('sendTomorrowWorkSchedule').timeBased().everyDays(1).atHour(21).create();
+  return {ok:true, msg:found ? 'Trigger lịch đã có.' : 'Đã bật gửi lịch khoảng 21:00 giờ Việt Nam mỗi tối.'};
+}
+
 /* ---------- Web ---------- */
 
 function doGet(e) {
