@@ -946,39 +946,52 @@ function getPayrollWorkbookData(monthStr) {
   var m = String(monthStr).match(/^(0[1-9]|1[0-2])\/(\d{4})$/); if (!m) throw new Error('Tháng không hợp lệ. Dùng MM/yyyy.');
   if (!src.sheet || !schedSrc.sheet) throw new Error('Thiếu CHECK IN hoặc LICHLAM; không thể xuất file đáng tin cậy.');
   var shifts = {}, days = daysInMonth(monthStr), sourceLabel = src.locked ? 'Bản chốt' : 'Dữ liệu hiện tại', scheduleLabel = schedSrc.locked ? 'Lịch tại thời điểm chốt' : (schedSrc.sheet ? 'Lịch hiện tại' : 'Không có lịch');
-  function add(ma, ten, ngay, ca, isException, uid) { var k=[ma,ngay,uid || ca,isException?'E':'L'].join('|'); if (!shifts[k]) shifts[k]={ma:ma,ten:ten,ngay:ngay,ca:ca,uid:uid||'',bd:'',kt:'',hasIn:false,hasOut:false,vao:'',ra:'',late:0,notes:[],absent:'',absentReason:'',isException:!!isException}; return shifts[k]; }
+  function add(ma, ten, ngay, ca, isException, uid, bd, kt) { var k=[ma,ngay,uid || ca,isException?'E':'L',bd||'',kt||''].join('|'); if (!shifts[k]) shifts[k]={ma:ma,ten:ten,ngay:ngay,ca:ca,uid:uid||'',bd:bd||'',kt:kt||'',hasIn:false,hasOut:false,vao:'',ra:'',late:0,notes:[],absent:'',absentReason:'',isException:!!isException}; return shifts[k]; }
   function scheduledShiftForEvent(ma,ngay,ca) {
     var keys=Object.keys(shifts).filter(function(k){var r=shifts[k];return !r.isException && r.ma===ma && r.ngay===ngay && (ca===r.ca || ca.indexOf(r.ca+' ')===0);});
-    // Do not guess if multiple scheduled shifts share the same name.
-    return keys.length===1 ? shifts[keys[0]] : null;
+    if(keys.length===1) return shifts[keys[0]];
+    var span=String(ca).match(/(\d{1,2}:\d\d)\s*[-–]\s*(\d{1,2}:\d\d)/);
+    if(span){var exact=keys.filter(function(k){var r=shifts[k];return r.bd===span[1]&&r.kt===span[2];});if(exact.length===1)return shifts[exact[0]];}
+    // Ambiguous old records must not be silently assigned to one shift.
+    return null;
   }
   // expand scheduled shifts for every date of the selected month
   if (schedSrc.sheet && schedSrc.sheet.getLastRow() >= 2) {
     var lv=schedSrc.sheet.getDataRange().getDisplayValues(), nc=lv[0].length;
     for (var i=1;i<lv.length;i++) { var ma=String(lv[i][0]||'').trim(); if(!ma)continue; var ten=String(lv[i][1]||''), dayCell=String(lv[i][nc>=7?3:2]||'').trim(), thu=nc>=7?String(lv[i][2]||'').trim():'', ca=String(lv[i][nc>=7?4:3]||'').trim(), bd=fmtTimeCell(lv[i][nc>=7?5:4]), kt=fmtTimeCell(lv[i][nc>=7?6:5]);
-      for(var d=1;d<=days;d++){var ngay=('0'+d).slice(-2)+'/'+m[1]+'/'+m[2]; if(thu&&!matchDay(thu,weekDay(parseVNDate(ngay))))continue; if(dayCell&&!matchDay(dayCell,weekDay(parseVNDate(ngay)))&&cellDay(dayCell)!==ngay)continue; if(!dayCell&&!thu)continue; var q=add(ma,ten,ngay,ca,false);q.bd=bd;q.kt=kt;}
+      for(var d=1;d<=days;d++){var ngay=('0'+d).slice(-2)+'/'+m[1]+'/'+m[2]; if(thu&&!matchDay(thu,weekDay(parseVNDate(ngay))))continue; if(dayCell&&!matchDay(dayCell,weekDay(parseVNDate(ngay)))&&cellDay(dayCell)!==ngay)continue; if(!dayCell&&!thu)continue; var q=add(ma,ten,ngay,ca,false,'',bd,kt);q.bd=bd;q.kt=kt;}
     }
   }
   if (src.sheet && src.sheet.getLastRow() >= 2) {
-    var cv=src.sheet.getDataRange().getDisplayValues(), raw=src.sheet.getDataRange().getValues();
-    for(var j=1;j<cv.length;j++){var ma2=String(cv[j][0]||'').trim();if(!ma2||thangCuaO(raw[j][2])!==monthStr)continue;var ngay2=ngayCuaO(raw[j][2]), type=String(cv[j][4]||''), ex=isExceptionType(type), note=String(cv[j][8]||''), uidMatch=note.match(/(?:^|\|)\s*ID:(EX-[A-Za-z0-9-]+)/), uid=ex&&uidMatch?uidMatch[1]:'', r=(ex?null:scheduledShiftForEvent(ma2,ngay2,String(cv[j][3]||'')))||add(ma2,String(cv[j][1]||''),ngay2,String(cv[j][3]||''),ex,uid), ti=cellHM(cv[j][5]),to=cellHM(cv[j][6]);
+    var cv=src.sheet.getDataRange().getDisplayValues(), raw=src.sheet.getDataRange().getValues(), legacyOpen={};
+    for(var j=1;j<cv.length;j++){var ma2=String(cv[j][0]||'').trim();if(!ma2||thangCuaO(raw[j][2])!==monthStr)continue;var ngay2=ngayCuaO(raw[j][2]), type=String(cv[j][4]||''), ex=isExceptionType(type), note=String(cv[j][8]||''), uidMatch=note.match(/(?:^|\|)\s*ID:(EX-[A-Za-z0-9-]+)/), uid=ex&&uidMatch?uidMatch[1]:'', legacyKey=ma2+'|'+ngay2+'|'+String(cv[j][3]||''), legacyUid=ex&&!uid?(type==='EXCEPTION_IN'?'EX-LEGACY-'+ma2+'-'+ngay2.split('/').reverse().join('')+'-'+j:(legacyOpen[legacyKey]||'EX-UNPAIRED-'+ma2+'-'+j)):'', r=(ex?null:scheduledShiftForEvent(ma2,ngay2,String(cv[j][3]||'')))||add(ma2,String(cv[j][1]||''),ngay2,String(cv[j][3]||''),ex,uid||legacyUid), ti=cellHM(cv[j][5]),to=cellHM(cv[j][6]);
+      if(ex&&!uid){if(type==='EXCEPTION_IN')legacyOpen[legacyKey]=legacyUid;else delete legacyOpen[legacyKey];}
       if(type==='IN'||type==='EXCEPTION_IN'){r.hasIn=true;r.vao=ti||r.vao;r.late=Math.max(r.late,Number(cv[j][7]||0));} else if(type==='OUT'||type==='EXCEPTION_OUT'){r.hasOut=true;r.ra=to||r.ra;} else if(type==='VẮNG'){r.absent='Vắng';r.absentReason=note.split(' (')[0]||'Vắng';r.reportedLate=Number(cv[j][7]||0);} if(note)r.notes.push(note);
     }
   }
   Object.keys(shifts).forEach(function(k){var r=shifts[k];if(!r.isException&&!r.hasIn&&!r.hasOut&&!r.absent&&isQuaGioCa(r.ngay,r.kt))r.absent='Vắng không báo';});
-  var exMissed={}, details=[];
-  Object.keys(shifts).sort(function(a,b){var ra=shifts[a],rb=shifts[b];return parseVNDate(ra.ngay)-parseVNDate(rb.ngay)||ra.ma.localeCompare(rb.ma)||a.localeCompare(b);}).forEach(function(k){var r=shifts[k], ek=r.ma+'|'+monthStr, scheduled=scheduleHours(r.ngay,r.bd,r.kt)||caHoursFromLabel(r.ngay,r.ca), before=getAnnualMissedBefore(ss,r.ma,r.ngay), ev=evaluateAttendanceShift({hasIn:r.hasIn,hasOut:r.hasOut,vao:r.vao,ra:r.ra,ngay:r.ngay,lateMin:r.late,scheduleHours:scheduled,absent:r.absent,absentReason:r.absentReason,reportedLate:r.reportedLate,isException:r.isException},before,exMissed[ek]||0);
+  var exMissed={}, sameDayMissed={}, details=[];
+  Object.keys(shifts).sort(function(a,b){var ra=shifts[a],rb=shifts[b];return parseVNDate(ra.ngay)-parseVNDate(rb.ngay)||ra.ma.localeCompare(rb.ma)||(ra.bd||ra.vao||'').localeCompare(rb.bd||rb.vao||'')||a.localeCompare(b);}).forEach(function(k){var r=shifts[k], ek=r.ma+'|'+monthStr, dayKey=r.ma+'|'+r.ngay, scheduled=scheduleHours(r.ngay,r.bd,r.kt)||caHoursFromLabel(r.ngay,r.ca), before=getAnnualMissedBefore(ss,r.ma,r.ngay)+(sameDayMissed[dayKey]||0), ev=evaluateAttendanceShift({hasIn:r.hasIn,hasOut:r.hasOut,vao:r.vao,ra:r.ra,ngay:r.ngay,lateMin:r.late,scheduleHours:scheduled,absent:r.absent,absentReason:r.absentReason,reportedLate:r.reportedLate,isException:r.isException},before,exMissed[ek]||0);
     if(r.isException&&(r.hasIn!==r.hasOut))exMissed[ek]=(exMissed[ek]||0)+1;
+    if(!r.isException&&(r.hasIn!==r.hasOut)&&isQuotaDate(r.ngay))sameDayMissed[dayKey]=(sameDayMissed[dayKey]||0)+1;
     details.push({r:r,ev:ev,quota:before + (!r.isException&&(r.hasIn!==r.hasOut)&&isQuotaDate(r.ngay)?1:0),source:sourceLabel,schedule:r.isException?'Không có lịch':scheduleLabel});
   });
   var exceptionIntervals={};
   details.forEach(function(x){if(!x.r.isException||!x.r.hasIn||!x.r.hasOut)return;var r=x.r, key=r.ma+'|'+r.ngay, intervals=exceptionIntervals[key]||(exceptionIntervals[key]=[]);var a=parseVN(r.ngay+' '+r.vao),b=parseVN(r.ngay+' '+r.ra);if(b<a)b+=86400000;intervals.push([a,b]);});
   details.forEach(function(x){var r=x.r;if(r.isException||!r.hasIn||!r.hasOut)return;var a=parseVN(r.ngay+' '+r.vao),b=parseVN(r.ngay+' '+r.ra);if(b<a)b+=86400000;var overlap=(exceptionIntervals[r.ma+'|'+r.ngay]||[]).some(function(t){return a<t[1]&&b>t[0];});if(overlap){x.ev.result='Không tính công';x.ev.reason='Trùng giờ ca đột xuất — chờ quản lý kiểm tra';x.ev.hours='';}});
   var roles={};getNhanVienList().forEach(function(n){roles[n.ma]=n.role;});
+  var controlIntervals={};
+  details.forEach(function(x){var r=x.r,e=x.ev;if(!(r.hasIn&&r.hasOut) || !(r.isException || e.result==='Tính theo giờ thực tế'))return;var k=r.ma+'|'+getWeekStart(r.ngay),a=parseVN(r.ngay+' '+r.vao),b=parseVN(r.ngay+' '+r.ra);if(b<a)b+=86400000;if(!controlIntervals[k])controlIntervals[k]=[];controlIntervals[k].push([a,b,r.isException]);});
   var byPerson={}, byWeek={}; details.forEach(function(x){var r=x.r,e=x.ev,pk=r.ma+'|'+r.ten;if(!byPerson[pk])byPerson[pk]={ma:r.ma,ten:r.ten,role:roles[r.ma]||'',actual:0,exempt:0,no:0,exceptions:0,quota:x.quota,kpi:[],leave:[],todo:[]};var p=byPerson[pk];p.quota=Math.max(p.quota,x.quota);if(e.result==='Tính theo giờ thực tế')p.actual+=Number(e.hours||0);else if(e.result==='Không tính công')p.no++;else p.exceptions++;if(e.kpi==='Có')p.kpi.push(r.ngay+' — '+r.ca+' — '+e.kpiReason);if(e.leave==='Trừ phép')p.leave.push(r.ngay+' — '+r.ca+' — '+e.reason);if(e.result==='Chờ duyệt Exception'||e.result==='Không tính công')p.todo.push(r.ngay+' — '+r.ca+' — '+e.reason);
     var wk=r.ma+'|'+getWeekStart(r.ngay);if(!byWeek[wk])byWeek[wk]={ma:r.ma,ten:r.ten,start:getWeekStart(r.ngay),actual:0,exempt:0,exception:0};if(e.result==='Tính theo giờ thực tế')byWeek[wk].actual+=Number(e.hours||0);if(r.isException&&r.hasIn&&r.hasOut)byWeek[wk].exception+=Number(hoursBetween(r.ngay,r.vao,r.ra)||0);
   });
-  var weekRows=Object.keys(byWeek).sort().map(function(k){var w=byWeek[k], total=Math.round((w.actual+w.exception)*100)/100, end=parseVNDate(w.start);end.setDate(end.getDate()+6);var endStr=('0'+end.getDate()).slice(-2)+'/'+('0'+(end.getMonth()+1)).slice(-2)+'/'+end.getFullYear(), state=total>46?'Vượt '+Math.round((total-46)*100)/100+' giờ':total===46?'Đủ 46 giờ':'Còn '+Math.round((46-total)*100)/100+' giờ', warn=total>46?'Vượt 46 giờ — cần quản lý kiểm tra':total>=40?'Từ 40 giờ — liên hệ Ms. Vân Anh':'';if(w.start.slice(3)!==monthStr||endStr.slice(3)!==monthStr)warn+=(warn?' | ':'')+'Chưa đủ dữ liệu tuần vắt tháng — kiểm tra tháng kề';return [w.ma,w.ten,w.start,endStr,w.actual,w.exception,total,46,state,warn];});
+  Object.keys(controlIntervals).forEach(function(k){var intervals=controlIntervals[k].sort(function(a,b){return a[0]-b[0]||a[1]-b[1];}), actual=0, exception=0, cursor=0;intervals.forEach(function(t){var fresh=Math.max(0,t[1]-Math.max(t[0],cursor))/3600000;if(t[2])exception+=fresh;else actual+=fresh;cursor=Math.max(cursor,t[1]);});if(byWeek[k]){byWeek[k].actual=Math.round(actual*100)/100;byWeek[k].exception=Math.round(exception*100)/100;}});
+  var weekRows=Object.keys(byWeek).sort().map(function(k){var w=byWeek[k], end=parseVNDate(w.start);end.setDate(end.getDate()+6);var endStr=('0'+end.getDate()).slice(-2)+'/'+('0'+(end.getMonth()+1)).slice(-2)+'/'+end.getFullYear(), missing=false;
+    // Read the adjacent month's archived events; never infer safety from a partial week.
+    var edgeDays=[w.start,endStr];
+    edgeDays.forEach(function(day){var adj=day.slice(3);if(adj===monthStr)return;var other=getPayrollAttendanceSource(ss,adj).sheet;if(!other){missing=true;return;}var v=other.getDataRange().getDisplayValues(), pairs={};for(var i=1;i<v.length;i++){var row=v[i],d=cellDay(row[2]);if(String(row[0]).trim()!==w.ma || parseVNDate(d)<parseVNDate(w.start)||parseVNDate(d)>parseVNDate(endStr))continue;var type=String(row[4]), key=d+'|'+String(row[3]);var p=pairs[key]||(pairs[key]={day:d,inn:'',out:'',ex:false});if(type==='IN'||type==='EXCEPTION_IN')p.inn=cellHM(row[5]);if(type==='OUT'||type==='EXCEPTION_OUT')p.out=cellHM(row[6]);p.ex=p.ex||isExceptionType(type);}Object.keys(pairs).forEach(function(key){var p=pairs[key];if(p.inn&&p.out){if(p.ex)w.exception+=Number(hoursBetween(p.day,p.inn,p.out)||0);else w.actual+=Number(hoursBetween(p.day,p.inn,p.out)||0);}});
+    });
+    var total=Math.round((w.actual+w.exception)*100)/100,state=missing?'Chưa đủ dữ liệu tuần':total>46?'Vượt '+Math.round((total-46)*100)/100+' giờ':total===46?'Đủ 46 giờ':'Còn '+Math.round((46-total)*100)/100+' giờ',warn=missing?'Chưa đủ dữ liệu tuần vắt tháng — kiểm tra tháng kề':total>46?'Vượt 46 giờ — cần quản lý kiểm tra':total>=40?'Từ 40 giờ — liên hệ Ms. Vân Anh':'';return [w.ma,w.ten,w.start,endStr,w.actual,w.exception,total,46,state,warn];});
   var summaryRows=Object.keys(byPerson).sort().map(function(k){var p=byPerson[k], ws=weekRows.filter(function(w){return w[0]===p.ma;}),high=ws.reduce(function(a,w){return Math.max(a,Number(w[6]||0));},0),state=high>46?'Vượt '+Math.round((high-46)*100)/100+' giờ':high>=40?'Từ 40 giờ — kiểm tra lịch':'Bình thường';return[p.ma,p.ten,p.role,Math.round(p.actual*100)/100,Math.round(p.exempt*100)/100,p.no,p.exceptions,p.quota+'/4',high,state,p.kpi.join('; '),p.leave.join('; '),p.todo.join('; ')];});
   var detailRows=details.map(function(x){var r=x.r,e=x.ev, verified=r.hasIn&&r.hasOut?hoursBetween(r.ngay,r.vao,r.ra):'', control=r.isException&&verified!==''?verified:e.result==='Tính theo giờ thực tế'?verified:0, proposed=e.result==='Tính theo giờ thực tế'?verified:0, ph=r.absentReason.indexOf('Phụ huynh xin nghỉ')===0, reminder=ph&&Number(r.reportedLate||0)>0?'PH xin nghỉ báo muộn '+r.reportedLate+' phút':'', note=r.notes.join(' | '), status=r.isException?'Chờ duyệt Exception':'Không có';return[payrollRowId(r),r.ma,r.ten,r.ngay,r.isException?'Ca đột xuất':'Ca lịch',r.ca,r.vao,r.ra,verified,proposed,e.result,e.reason,r.late||r.reportedLate||0,e.kpi,e.kpiReason,e.leave==='Trừ phép'?'Trừ phép':'Không trừ phép',e.leave==='Trừ phép'?r.absentReason:'',x.quota+'/4',status,note,x.source,x.schedule,PAYROLL_V4_VERSION,control,reminder];});
   return {detailRows:detailRows,summaryRows:summaryRows,weekRows:weekRows};
@@ -1002,7 +1015,19 @@ function chotThangAnToan(monthStr, replaceExisting) {
     specs.forEach(function(s,idx){var old=ss.getSheetByName(s.to);if(old)old.setName('CU_CHOT_'+tag+'_'+idx);copies[idx].setName(s.to);copies[idx].setTabColor('#B8A38B');copies[idx].getRange(1,1).setNote('🔒 BẢN ĐÃ CHỐT | Tháng: '+monthStr+' | Lúc: '+fmtDT(new Date()));copies[idx].setFrozenRows(1);});
     specs.forEach(function(s,idx){var old=ss.getSheetByName('CU_CHOT_'+tag+'_'+idx);if(old)ss.deleteSheet(old);});
     return {ok:true,msg:'Đã chốt chấm công và lịch tháng '+monthStr+'.'};
-  } catch(e) { Logger.log('Chốt tháng lỗi: '+e.message);return {ok:false,msg:'Chốt tháng chưa hoàn tất: '+e.message+'; kiểm tra các sheet TAM_CHOT/CU_CHOT, không xóa thủ công.'}; }
+  } catch(e) {
+    Logger.log('Chốt tháng lỗi: '+e.message);
+    // Khôi phục tên chuẩn của cả hai bản cũ trước; giữ bản tạm nếu không thể dọn.
+    specs.forEach(function(s,idx){
+      var old=ss.getSheetByName('CU_CHOT_'+tag+'_'+idx);
+      if(old){
+        var partial=ss.getSheetByName(s.to);
+        if(partial) partial.setName('TAM_LOI_'+tag+'_'+idx);
+        old.setName(s.to);
+      }
+    });
+    return {ok:false,msg:'Chốt tháng chưa hoàn tất: '+e.message+'; bản cũ được giữ lại. Kiểm tra các sheet TAM_CHOT/TAM_LOI trước khi thử lại.'};
+  }
 }
 
 /* ---------- Quy tắc công/lương (chỉ đọc dữ liệu nguồn) ---------- */

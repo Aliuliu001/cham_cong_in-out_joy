@@ -8,6 +8,17 @@
 - [x] Báo cáo ngày/tháng; phát hiện Vắng không báo.
 - [x] Xuất CSV/XLSX chấm công một chiều; CSV UTF-8 BOM; ưu tiên `CHECK IN - Tháng MM-yyyy` nếu có.
 
+## Rà soát an toàn v4 (chạy Node, chờ kiểm thử Apps Script thật)
+
+- [x] Hai ca lịch cùng tên khác giờ và hai Exception cũ cùng ngày không bị gộp trong file xuất.
+- [x] Quota ca quên thứ 5 cùng ngày bật tín hiệu KPI.
+- [x] Tuần vắt tháng đọc tháng kề khi có dữ liệu; thiếu thì cảnh báo chưa đủ dữ liệu.
+- [x] Giờ Exception chồng nhau không cộng đôi trong tổng kiểm soát của tháng được xuất.
+- [x] Chốt lại lỗi giữa hai bản snapshot phục hồi tên bản cũ trong kiểm thử mô phỏng.
+- [ ] Kiểm thử với Google Sheets/Apps Script thật: tải XLSX, mở lại, đối chiếu sheet/cột/dữ liệu và thử bot nhận file.
+- [ ] Kiểm thử chốt tháng trên bản sao Sheets trước khi dùng trên dữ liệu thật; không thử lỗi nhân tạo trên bản thật.
+- [ ] Đối chiếu tuần vắt tháng có ca trùng/chồng ở tháng kề và dữ liệu cũ chưa có ID; nếu bất định, yêu cầu quản lý kiểm tra trước khi tính lương.
+
 ## Đợt nâng cấp đã chốt
 
 ### 1. Tài liệu và hợp đồng dữ liệu

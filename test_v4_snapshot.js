@@ -1,0 +1,8 @@
+const assert=require('assert'),fs=require('fs'),vm=require('vm');
+const sheets={};let fail='';
+function sheet(name,rows){return {name, rows, getName(){return this.name},setName(n){if(fail===n){fail='';throw Error('copy failure');}delete sheets[this.name];this.name=n;sheets[n]=this;return this},getLastRow(){return rows.length},copyTo(){const s=sheet('Copy '+Object.keys(sheets).length,rows.map(x=>x.slice()));sheets[s.name]=s;return s},setTabColor(){return this},getRange(){return {setNote(){return this}}},setFrozenRows(){return this}}}
+sheets['CHECK IN']=sheet('CHECK IN',[['Mã NV']]);sheets.LICHLAM=sheet('LICHLAM',[['Mã NV']]);sheets['CHECK IN - Tháng 11-2026']=sheet('CHECK IN - Tháng 11-2026',[['OLD CHECK']]);sheets['LICHLAM - Tháng 11-2026']=sheet('LICHLAM - Tháng 11-2026',[['OLD LICH']]);
+const s={Date,Math,Number,String,Object,Array,RegExp,JSON,Error,Logger:{log(){}},SpreadsheetApp:{getActiveSpreadsheet:()=>({getSheetByName:n=>sheets[n],deleteSheet:sh=>{delete sheets[sh.name]}})},Utilities:{formatDate:()=> '29/10/2026 12:00'}};vm.createContext(s);vm.runInContext(fs.readFileSync('Code.gs','utf8'),s);
+assert.equal(s.chotThangAnToan('11/2026',false).exists,true);
+fail='LICHLAM - Tháng 11-2026';const r=s.chotThangAnToan('11/2026',true);assert.equal(r.ok,false);assert.ok(sheets['CHECK IN - Tháng 11-2026'],'old check snapshot must remain under canonical name after failed replacement');assert.ok(sheets['LICHLAM - Tháng 11-2026'],'old schedule snapshot must remain under canonical name after failed replacement');assert.equal(sheets['CHECK IN - Tháng 11-2026'].rows[0][0],'OLD CHECK');
+console.log('PASS snapshot rollback');
