@@ -106,10 +106,28 @@ function sendTomorrowWorkSchedule(now) {
   finally { lock.releaseLock(); }
 }
 
+// Chạy thủ công một lần sau khi gửi /id@joy_victini_bot trong nhóm.
+// Chỉ trả ID nhóm qua Apps Script log, không đọc hoặc in token.
+function layIdNhomLichLam() {
+  var token = PropertiesService.getScriptProperties().getProperty('LICH_LAM_BOT_TOKEN');
+  if (!token) return 'Chưa nhập LICH_LAM_BOT_TOKEN trong Script Properties.';
+  var resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/getUpdates', {muteHttpExceptions:true});
+  var data = JSON.parse(resp.getContentText());
+  if (!data.ok) return 'Không đọc được tin bot: kiểm tra mã bot và thử lại.';
+  var groups = (data.result || []).map(function(x){return (x.message || x.channel_post || {}).chat;}).filter(function(x){return x && (x.type === 'group' || x.type === 'supergroup');});
+  if (!groups.length) return 'Chưa thấy tin nhóm. Gửi /id@joy_victini_bot vào nhóm rồi chạy lại.';
+  var g = groups[groups.length - 1];
+  var text = 'Nhóm gần nhất: ' + g.title + ' | ID: ' + g.id + '. Xác nhận đúng Lịch làm việc trước khi nhập LICH_LAM_CHAT_ID.';
+  Logger.log(text);
+  return text;
+}
+
 function setupLichLamTrigger() {
   var props = PropertiesService.getScriptProperties();
   if (!props.getProperty('LICH_LAM_BOT_TOKEN') || !props.getProperty('LICH_LAM_CHAT_ID'))
     return {ok:false, msg:'Nhập token và ID nhóm vào Script Properties trước.'};
+  if (props.getProperty('LICH_LAM_CHAT_ID') !== '-1004452694903')
+    return {ok:false, msg:'ID nhóm chưa khớp nhóm Lịch làm việc. Không bật lịch để tránh gửi nhầm.'};
   var found = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'sendTomorrowWorkSchedule'; });
   if (!found) ScriptApp.newTrigger('sendTomorrowWorkSchedule').timeBased().everyDays(1).atHour(21).create();
   return {ok:true, msg:found ? 'Trigger lịch đã có.' : 'Đã bật gửi lịch khoảng 21:00 giờ Việt Nam mỗi tối.'};
@@ -286,8 +304,8 @@ function getCheckinNotice(ma) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), now = new Date(), year = String(now.getFullYear()), rows = [], sheets = ss.getSheets();
   sheets.forEach(function(sh) { if (sh.getName() === 'CHECK IN' || sh.getName().indexOf('CHECK IN - Tháng ') === 0) { var v=sh.getDataRange().getDisplayValues(); for(var i=1;i<v.length;i++) rows.push(v[i]); } });
   var by = {}, missed = 0, last = null;
-  rows.forEach(function(r) { if(String(r[0]).trim()!==String(ma).trim() || String(cellDay(r[2])).slice(6)!==year) return; var day=cellDay(r[2]); if(year==='2026' && day<'01/11/2026') return; var key=day+'|'+String(r[3]), o=by[key]||(by[key]={day:day,ca:String(r[3]),in:false,out:false}); if(r[4]==='IN')o.in=true; if(r[4]==='OUT')o.out=true; });
-  Object.keys(by).sort().forEach(function(k){var o=by[k];if(o.in!==o.out){missed++;last=o;}});
+  rows.forEach(function(r) { if(String(r[0]).trim()!==String(ma).trim() || String(cellDay(r[2])).slice(6)!==year) return; var day=cellDay(r[2]); if(year==='2026' && parseVNDate(day)<new Date(2026,10,1)) return; var key=day+'|'+String(r[3]), o=by[key]||(by[key]={day:day,ca:String(r[3]),in:false,out:false}); if(r[4]==='IN')o.in=true; if(r[4]==='OUT')o.out=true; });
+  Object.keys(by).sort(function(a,b){return parseVNDate(by[a].day)-parseVNDate(by[b].day)||a.localeCompare(b);}).forEach(function(k){var o=by[k];if(o.in!==o.out && parseVNDate(o.day)<new Date(now.getFullYear(),now.getMonth(),now.getDate())){missed++;last=o;}});
   var weekStart=getWeekStart(fmtD(now)), weekEnd=new Date(now.getFullYear(),now.getMonth(),now.getDate()), weekHours=0, pairs={};
   rows.forEach(function(r){if(String(r[0]).trim()!==String(ma).trim())return;var day=cellDay(r[2]);if(parseVNDate(day).getTime()<parseVNDate(weekStart).getTime()||parseVNDate(day).getTime()>weekEnd.getTime())return;var k=day+'|'+String(r[3]),o=pairs[k]||(pairs[k]={day:day,ca:String(r[3]),vao:'',ra:''});if(r[4]==='IN')o.vao=cellHM(r[5]);if(r[4]==='OUT')o.ra=cellHM(r[6]);});
   Object.keys(pairs).forEach(function(k){var o=pairs[k];if(o.vao&&o.ra)weekHours+=Number(hoursBetween(o.day,o.vao,o.ra)||0);});
@@ -459,9 +477,15 @@ function submitException(p) {
   // Sự kiện Exception gần nhất quyết định đang mở hay đã đóng; không mở chồng hai ca.
   for(var i=rows.length-1;i>=1;i--) if(String(rows[i][0]).trim()===p.ma && (rows[i][4]==='EXCEPTION_IN'||rows[i][4]==='EXCEPTION_OUT')) { if(rows[i][4]==='EXCEPTION_IN') open=rows[i]; break; }
   var type=open?'EXCEPTION_OUT':'EXCEPTION_IN', ca='Ca đột xuất — '+p.reason;
+  var id=open && String(open[8]).match(/ID:(EX-[A-Za-z0-9-]+)/);
+  var uid=id ? id[1] : 'EX-' + now.getTime() + '-' + Utilities.getUuid().replace(/-/g,'').slice(0,8);
   if(open) ca=String(open[3]);
+  if(type==='EXCEPTION_IN') {
+    var cv=sh.getDataRange().getDisplayValues();
+    for(var q=1;q<cv.length;q++) if(String(cv[q][0]).trim()===String(p.ma).trim() && cellDay(cv[q][2])===fmtD(now) && cv[q][4]==='IN') return {ok:false,msg:'Đang có ca lịch; không mở ca đột xuất trùng giờ.'};
+  }
   var blob=Utilities.newBlob(Utilities.base64Decode(p.photo),'image/jpeg',p.ma+'_'+fmtFile(now)+'_'+type+'.jpg'), url=getFolder().createFile(blob).getUrl();
-  sh.appendRow([p.ma,p.ten,fmtD(now),ca,type,type==='EXCEPTION_IN'?cellHM(now):'',type==='EXCEPTION_OUT'?cellHM(now):'',0,'Exception | '+p.reason,url,dist,p.device||'']);
+  sh.appendRow([p.ma,p.ten,fmtD(now),ca,type,type==='EXCEPTION_IN'?cellHM(now):'',type==='EXCEPTION_OUT'?cellHM(now):'',0,'Exception | '+p.reason+' | ID:'+uid,url,dist,p.device||'']);
   return {ok:true,msg:type==='EXCEPTION_IN'?'Đã CHECK IN CA ĐỘT XUẤT. Khi xong việc bấm lại CA ĐỘT XUẤT để CHECK OUT.':'Đã CHECK OUT CA ĐỘT XUẤT. Ca này chờ quản lý duyệt.',type:type};
 }
 
@@ -651,7 +675,7 @@ function getBaoCaoThang(ma, thangStr) {
         // Vắng có phép: 0 giờ, không tính ca làm, nhưng VẮNG bấm muộn vẫn tính trễ như đi trễ.
         res.soVangCoPhep++;
         var caV = r.ca || 'Ca chung';
-        if (r.tre > 0 && !caDaTinhTre[caV]) {
+        if (r.tre > 0 && r.note.indexOf('Phụ huynh xin nghỉ') !== 0 && !caDaTinhTre[caV]) {
           res.soLanTre++;
           res.soLanTreThucTe++;
           caDaTinhTre[caV] = true;
@@ -797,11 +821,12 @@ function getPayrollAttendanceSource(ss, monthStr) {
 }
 
 function getPayrollAttendanceRows(monthStr) {
+  // Legacy CSV 12 cột chỉ cho đối chiếu; không dùng làm nguồn tự tính lương.
   var m = String(monthStr || '').match(/^(0[1-9]|1[0-2])\/(\d{4})$/);
   if (!m) throw new Error('Tháng không hợp lệ. Dùng định dạng MM/yyyy.');
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = getPayrollAttendanceSource(ss, monthStr).sheet;
-  var shL = ss.getSheetByName('LICHLAM');
+  var shL = payrollScheduleSource(ss, monthStr).sheet;
   var result = {};
   var days = new Date(Number(m[2]), Number(m[1]), 0).getDate();
   var dateKeys = [];
@@ -889,16 +914,21 @@ function exportPayrollAttendanceXlsx(monthStr) {
   return { url: url, filename: 'Cham_cong_tinh_luong_' + monthStr.replace('/', '-') + '.xlsx' };
 }
 
-var PAYROLL_DETAIL_HEADERS = ['Mã NV','Họ tên','Ngày','Loại ca','Tên ca','Giờ VÀO','Giờ RA','Số giờ','Kết quả công','Lý do','Ảnh hưởng KPI','Lý do KPI','Phép','Quên chấm năm nay','Trạng thái Exception','Ghi chú','Nguồn dữ liệu','Lịch đối chiếu','Phiên bản file'];
+var PAYROLL_DETAIL_HEADERS = ['Mã dòng','Mã NV','Họ tên','Ngày','Loại ca','Tên ca','Giờ VÀO','Giờ RA','Số giờ thực tế','Giờ đề xuất tính công','Kết quả công','Lý do','Trễ (phút)','Ảnh hưởng KPI','Lý do KPI','Phép','Lý do phép','Quên chấm năm nay','Trạng thái Exception','Ghi chú','Nguồn dữ liệu','Lịch đối chiếu','Phiên bản file','Giờ dùng kiểm soát 46h','Nhắc nhở'];
+var PAYROLL_V4_VERSION = 'attendance-export-v4';
+function payrollRowId(r) {
+  if (r.isException && r.uid) return r.uid;
+  return (r.isException ? 'EX-LEGACY-' : 'CA-') + [r.ma, r.ngay.split('/').reverse().join(''), r.ca, r.bd || '', r.kt || ''].map(function(x){return encodeURIComponent(String(x));}).join('-');
+}
 var PAYROLL_SUMMARY_HEADERS = ['Mã NV','Họ tên','Vai trò','Tổng giờ hợp lệ tháng','Giờ miễn trừ','Số ca không tính công','Số Exception chờ duyệt','Quên chấm năm nay','Giờ tuần cao nhất','Tình trạng 46 giờ','Ngày cần xem KPI','Ngày trừ phép','Cần quản lý xem'];
-var PAYROLL_WEEK_HEADERS = ['Mã NV','Họ tên','Tuần từ','Tuần đến','Giờ thực tế hợp lệ','Giờ miễn trừ','Tổng giờ dùng kiểm soát lịch','Mốc hợp đồng','Còn lại/Vượt','Cảnh báo'];
+var PAYROLL_WEEK_HEADERS = ['Mã NV','Họ tên','Tuần từ','Tuần đến','Giờ thực tế hợp lệ','Giờ Exception chờ duyệt','Tổng giờ dùng kiểm soát lịch','Mốc hợp đồng','Còn lại/Vượt','Cảnh báo'];
 
 function payrollScheduleSource(ss, monthStr) {
   var n = 'LICHLAM - Tháng ' + monthStr.replace('/', '-'), sh = ss.getSheetByName(n);
   return { sheet: sh || ss.getSheetByName('LICHLAM'), locked: !!sh, name: sh ? n : 'LICHLAM' };
 }
 function isExceptionType(t) { return t === 'EXCEPTION_IN' || t === 'EXCEPTION_OUT'; }
-function isQuotaDate(ngay) { return ngay.slice(6) !== '2026' || ngay >= '01/11/2026'; }
+function isQuotaDate(ngay) { return ngay.slice(6) !== '2026' || parseVNDate(ngay) >= new Date(2026,10,1); }
 function daysInMonth(monthStr) { var p = monthStr.split('/'); return new Date(Number(p[1]), Number(p[0]), 0).getDate(); }
 function caHoursFromLabel(ngay, ca) { return scheduleHours(ngay, caBdFromLabel(ca), caKtFromLabel(ca)); }
 
@@ -907,15 +937,21 @@ function caHoursFromLabel(ngay, ca) { return scheduleHours(ngay, caBdFromLabel(c
 // phải biết các lần đã dùng từ những tháng trước, không được reset theo tháng.
 function getAnnualMissedBefore(ss, ma, ngayTarget) {
   var year=ngayTarget.slice(6), all={}, sheets=ss.getSheets ? ss.getSheets() : [];
-  sheets.forEach(function(sh){ var name=sh.getName(); if(name!=='CHECK IN' && name.indexOf('CHECK IN - Tháng ')!==0)return; if(sh.getLastRow()<2)return; var d=sh.getDataRange(), v=d.getDisplayValues(), raw=d.getValues(); for(var i=1;i<v.length;i++){if(String(v[i][0]).trim()!==String(ma).trim())continue;var day=ngayCuaO(raw[i][2]);if(day.slice(6)!==year||(year==='2026'&&day<'01/11/2026'))continue;var k=day+'|'+String(v[i][3]||''),o=all[k]||(all[k]={day:day,in:false,out:false});if(v[i][4]==='IN')o.in=true;if(v[i][4]==='OUT')o.out=true;}});
-  var n=0;Object.keys(all).forEach(function(k){var o=all[k];if(o.day<ngayTarget&&o.in!==o.out)n++;});return n;
+  sheets.forEach(function(sh){ var name=sh.getName(); if(name!=='CHECK IN' && name.indexOf('CHECK IN - Tháng ')!==0)return; if(sh.getLastRow()<2)return; var d=sh.getDataRange(), v=d.getDisplayValues(), raw=d.getValues(); for(var i=1;i<v.length;i++){if(String(v[i][0]).trim()!==String(ma).trim())continue;var day=ngayCuaO(raw[i][2]);if(day.slice(6)!==year||(year==='2026'&&parseVNDate(day)<new Date(2026,10,1)))continue;var k=day+'|'+String(v[i][3]||''),o=all[k]||(all[k]={day:day,in:false,out:false});if(v[i][4]==='IN')o.in=true;if(v[i][4]==='OUT')o.out=true;}});
+  var n=0;Object.keys(all).forEach(function(k){var o=all[k];if(parseVNDate(o.day)<parseVNDate(ngayTarget)&&o.in!==o.out)n++;});return n;
 }
 
 function getPayrollWorkbookData(monthStr) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), src = getPayrollAttendanceSource(ss, monthStr), schedSrc = payrollScheduleSource(ss, monthStr);
   var m = String(monthStr).match(/^(0[1-9]|1[0-2])\/(\d{4})$/); if (!m) throw new Error('Tháng không hợp lệ. Dùng MM/yyyy.');
-  var shifts = {}, days = daysInMonth(monthStr), sourceLabel = src.locked ? 'Bản chốt' : 'Dữ liệu hiện tại', scheduleLabel = schedSrc.locked ? 'Lịch đã chốt' : 'Lịch hiện tại';
-  function add(ma, ten, ngay, ca, isException) { var k=[ma,ngay,ca,isException?'E':'L'].join('|'); if (!shifts[k]) shifts[k]={ma:ma,ten:ten,ngay:ngay,ca:ca,bd:'',kt:'',hasIn:false,hasOut:false,vao:'',ra:'',late:0,notes:[],absent:'',absentReason:'',isException:!!isException}; return shifts[k]; }
+  if (!src.sheet || !schedSrc.sheet) throw new Error('Thiếu CHECK IN hoặc LICHLAM; không thể xuất file đáng tin cậy.');
+  var shifts = {}, days = daysInMonth(monthStr), sourceLabel = src.locked ? 'Bản chốt' : 'Dữ liệu hiện tại', scheduleLabel = schedSrc.locked ? 'Lịch tại thời điểm chốt' : (schedSrc.sheet ? 'Lịch hiện tại' : 'Không có lịch');
+  function add(ma, ten, ngay, ca, isException, uid) { var k=[ma,ngay,uid || ca,isException?'E':'L'].join('|'); if (!shifts[k]) shifts[k]={ma:ma,ten:ten,ngay:ngay,ca:ca,uid:uid||'',bd:'',kt:'',hasIn:false,hasOut:false,vao:'',ra:'',late:0,notes:[],absent:'',absentReason:'',isException:!!isException}; return shifts[k]; }
+  function scheduledShiftForEvent(ma,ngay,ca) {
+    var keys=Object.keys(shifts).filter(function(k){var r=shifts[k];return !r.isException && r.ma===ma && r.ngay===ngay && (ca===r.ca || ca.indexOf(r.ca+' ')===0);});
+    // Do not guess if multiple scheduled shifts share the same name.
+    return keys.length===1 ? shifts[keys[0]] : null;
+  }
   // expand scheduled shifts for every date of the selected month
   if (schedSrc.sheet && schedSrc.sheet.getLastRow() >= 2) {
     var lv=schedSrc.sheet.getDataRange().getDisplayValues(), nc=lv[0].length;
@@ -925,24 +961,26 @@ function getPayrollWorkbookData(monthStr) {
   }
   if (src.sheet && src.sheet.getLastRow() >= 2) {
     var cv=src.sheet.getDataRange().getDisplayValues(), raw=src.sheet.getDataRange().getValues();
-    for(var j=1;j<cv.length;j++){var ma2=String(cv[j][0]||'').trim();if(!ma2||thangCuaO(raw[j][2])!==monthStr)continue;var ngay2=ngayCuaO(raw[j][2]), type=String(cv[j][4]||''), ex=isExceptionType(type), r=add(ma2,String(cv[j][1]||''),ngay2,String(cv[j][3]||''),ex), ti=cellHM(cv[j][5]),to=cellHM(cv[j][6]),note=String(cv[j][8]||'');
+    for(var j=1;j<cv.length;j++){var ma2=String(cv[j][0]||'').trim();if(!ma2||thangCuaO(raw[j][2])!==monthStr)continue;var ngay2=ngayCuaO(raw[j][2]), type=String(cv[j][4]||''), ex=isExceptionType(type), note=String(cv[j][8]||''), uidMatch=note.match(/(?:^|\|)\s*ID:(EX-[A-Za-z0-9-]+)/), uid=ex&&uidMatch?uidMatch[1]:'', r=(ex?null:scheduledShiftForEvent(ma2,ngay2,String(cv[j][3]||'')))||add(ma2,String(cv[j][1]||''),ngay2,String(cv[j][3]||''),ex,uid), ti=cellHM(cv[j][5]),to=cellHM(cv[j][6]);
       if(type==='IN'||type==='EXCEPTION_IN'){r.hasIn=true;r.vao=ti||r.vao;r.late=Math.max(r.late,Number(cv[j][7]||0));} else if(type==='OUT'||type==='EXCEPTION_OUT'){r.hasOut=true;r.ra=to||r.ra;} else if(type==='VẮNG'){r.absent='Vắng';r.absentReason=note.split(' (')[0]||'Vắng';r.reportedLate=Number(cv[j][7]||0);} if(note)r.notes.push(note);
     }
   }
   Object.keys(shifts).forEach(function(k){var r=shifts[k];if(!r.isException&&!r.hasIn&&!r.hasOut&&!r.absent&&isQuaGioCa(r.ngay,r.kt))r.absent='Vắng không báo';});
-  var annual={}, exMissed={}, details=[];
-  Object.keys(shifts).sort().forEach(function(k){var r=shifts[k], year=r.ngay.slice(6), ak=r.ma+'|'+year, ek=r.ma+'|'+monthStr, scheduled=scheduleHours(r.ngay,r.bd,r.kt)||caHoursFromLabel(r.ngay,r.ca), before=(annual[ak]||0)+getAnnualMissedBefore(ss,r.ma,r.ngay), ev=evaluateAttendanceShift({hasIn:r.hasIn,hasOut:r.hasOut,vao:r.vao,ra:r.ra,ngay:r.ngay,lateMin:r.late,scheduleHours:scheduled,absent:r.absent,absentReason:r.absentReason,reportedLate:r.reportedLate,isException:r.isException},before,exMissed[ek]||0);
-    if(!r.isException&&(r.hasIn!==r.hasOut)&&isQuotaDate(r.ngay))annual[ak]=(annual[ak]||0)+1;
+  var exMissed={}, details=[];
+  Object.keys(shifts).sort(function(a,b){var ra=shifts[a],rb=shifts[b];return parseVNDate(ra.ngay)-parseVNDate(rb.ngay)||ra.ma.localeCompare(rb.ma)||a.localeCompare(b);}).forEach(function(k){var r=shifts[k], ek=r.ma+'|'+monthStr, scheduled=scheduleHours(r.ngay,r.bd,r.kt)||caHoursFromLabel(r.ngay,r.ca), before=getAnnualMissedBefore(ss,r.ma,r.ngay), ev=evaluateAttendanceShift({hasIn:r.hasIn,hasOut:r.hasOut,vao:r.vao,ra:r.ra,ngay:r.ngay,lateMin:r.late,scheduleHours:scheduled,absent:r.absent,absentReason:r.absentReason,reportedLate:r.reportedLate,isException:r.isException},before,exMissed[ek]||0);
     if(r.isException&&(r.hasIn!==r.hasOut))exMissed[ek]=(exMissed[ek]||0)+1;
-    details.push({r:r,ev:ev,quota:before + (!r.isException&&(r.hasIn!==r.hasOut)&&isQuotaDate(r.ngay)?1:0),source:sourceLabel,schedule:scheduleLabel});
+    details.push({r:r,ev:ev,quota:before + (!r.isException&&(r.hasIn!==r.hasOut)&&isQuotaDate(r.ngay)?1:0),source:sourceLabel,schedule:r.isException?'Không có lịch':scheduleLabel});
   });
+  var exceptionIntervals={};
+  details.forEach(function(x){if(!x.r.isException||!x.r.hasIn||!x.r.hasOut)return;var r=x.r, key=r.ma+'|'+r.ngay, intervals=exceptionIntervals[key]||(exceptionIntervals[key]=[]);var a=parseVN(r.ngay+' '+r.vao),b=parseVN(r.ngay+' '+r.ra);if(b<a)b+=86400000;intervals.push([a,b]);});
+  details.forEach(function(x){var r=x.r;if(r.isException||!r.hasIn||!r.hasOut)return;var a=parseVN(r.ngay+' '+r.vao),b=parseVN(r.ngay+' '+r.ra);if(b<a)b+=86400000;var overlap=(exceptionIntervals[r.ma+'|'+r.ngay]||[]).some(function(t){return a<t[1]&&b>t[0];});if(overlap){x.ev.result='Không tính công';x.ev.reason='Trùng giờ ca đột xuất — chờ quản lý kiểm tra';x.ev.hours='';}});
   var roles={};getNhanVienList().forEach(function(n){roles[n.ma]=n.role;});
-  var byPerson={}, byWeek={}; details.forEach(function(x){var r=x.r,e=x.ev,pk=r.ma+'|'+r.ten;if(!byPerson[pk])byPerson[pk]={ma:r.ma,ten:r.ten,role:roles[r.ma]||'',actual:0,exempt:0,no:0,exceptions:0,quota:x.quota,kpi:[],leave:[],todo:[]};var p=byPerson[pk];p.quota=Math.max(p.quota,x.quota);if(e.result==='Tính theo giờ thực tế')p.actual+=Number(e.hours||0);else if(e.result==='Tính theo giờ lịch miễn trừ')p.exempt+=Number(e.hours||0);else if(e.result==='Không tính công')p.no++;else p.exceptions++;if(e.kpi==='Có')p.kpi.push(r.ngay+' — '+e.kpiReason);if(e.leave==='Trừ phép')p.leave.push(r.ngay+' — '+e.reason);if(e.result==='Chờ duyệt Exception'||e.result==='Không tính công')p.todo.push(r.ngay+' — '+e.reason);
-    var wk=r.ma+'|'+getWeekStart(r.ngay);if(!byWeek[wk])byWeek[wk]={ma:r.ma,ten:r.ten,start:getWeekStart(r.ngay),actual:0,exempt:0};if(e.result==='Tính theo giờ thực tế')byWeek[wk].actual+=Number(e.hours||0);if(e.result==='Tính theo giờ lịch miễn trừ')byWeek[wk].exempt+=Number(e.hours||0);
+  var byPerson={}, byWeek={}; details.forEach(function(x){var r=x.r,e=x.ev,pk=r.ma+'|'+r.ten;if(!byPerson[pk])byPerson[pk]={ma:r.ma,ten:r.ten,role:roles[r.ma]||'',actual:0,exempt:0,no:0,exceptions:0,quota:x.quota,kpi:[],leave:[],todo:[]};var p=byPerson[pk];p.quota=Math.max(p.quota,x.quota);if(e.result==='Tính theo giờ thực tế')p.actual+=Number(e.hours||0);else if(e.result==='Không tính công')p.no++;else p.exceptions++;if(e.kpi==='Có')p.kpi.push(r.ngay+' — '+r.ca+' — '+e.kpiReason);if(e.leave==='Trừ phép')p.leave.push(r.ngay+' — '+r.ca+' — '+e.reason);if(e.result==='Chờ duyệt Exception'||e.result==='Không tính công')p.todo.push(r.ngay+' — '+r.ca+' — '+e.reason);
+    var wk=r.ma+'|'+getWeekStart(r.ngay);if(!byWeek[wk])byWeek[wk]={ma:r.ma,ten:r.ten,start:getWeekStart(r.ngay),actual:0,exempt:0,exception:0};if(e.result==='Tính theo giờ thực tế')byWeek[wk].actual+=Number(e.hours||0);if(r.isException&&r.hasIn&&r.hasOut)byWeek[wk].exception+=Number(hoursBetween(r.ngay,r.vao,r.ra)||0);
   });
-  var weekRows=Object.keys(byWeek).sort().map(function(k){var w=byWeek[k], total=Math.round((w.actual+w.exempt)*100)/100, end=parseVNDate(w.start);end.setDate(end.getDate()+6);var endStr=('0'+end.getDate()).slice(-2)+'/'+('0'+(end.getMonth()+1)).slice(-2)+'/'+end.getFullYear(), state=total>46?'Vượt '+Math.round((total-46)*100)/100+' giờ':total===46?'Đủ 46 giờ':'Còn '+Math.round((46-total)*100)/100+' giờ', warn=total>=46?'Vượt 46 giờ — cần quản lý kiểm tra':total>=40?'Từ 40 giờ — liên hệ Ms. Vân Anh':'';return [w.ma,w.ten,w.start,endStr,w.actual,w.exempt,total,46,state,warn];});
+  var weekRows=Object.keys(byWeek).sort().map(function(k){var w=byWeek[k], total=Math.round((w.actual+w.exception)*100)/100, end=parseVNDate(w.start);end.setDate(end.getDate()+6);var endStr=('0'+end.getDate()).slice(-2)+'/'+('0'+(end.getMonth()+1)).slice(-2)+'/'+end.getFullYear(), state=total>46?'Vượt '+Math.round((total-46)*100)/100+' giờ':total===46?'Đủ 46 giờ':'Còn '+Math.round((46-total)*100)/100+' giờ', warn=total>46?'Vượt 46 giờ — cần quản lý kiểm tra':total>=40?'Từ 40 giờ — liên hệ Ms. Vân Anh':'';if(w.start.slice(3)!==monthStr||endStr.slice(3)!==monthStr)warn+=(warn?' | ':'')+'Chưa đủ dữ liệu tuần vắt tháng — kiểm tra tháng kề';return [w.ma,w.ten,w.start,endStr,w.actual,w.exception,total,46,state,warn];});
   var summaryRows=Object.keys(byPerson).sort().map(function(k){var p=byPerson[k], ws=weekRows.filter(function(w){return w[0]===p.ma;}),high=ws.reduce(function(a,w){return Math.max(a,Number(w[6]||0));},0),state=high>46?'Vượt '+Math.round((high-46)*100)/100+' giờ':high>=40?'Từ 40 giờ — kiểm tra lịch':'Bình thường';return[p.ma,p.ten,p.role,Math.round(p.actual*100)/100,Math.round(p.exempt*100)/100,p.no,p.exceptions,p.quota+'/4',high,state,p.kpi.join('; '),p.leave.join('; '),p.todo.join('; ')];});
-  var detailRows=details.map(function(x){var r=x.r,e=x.ev;return[r.ma,r.ten,r.ngay,r.isException?'Ca đột xuất':'Ca lịch',r.ca,r.vao,r.ra,e.hours,e.result,e.reason,e.kpi,e.kpiReason,e.leave,x.quota+'/4',r.isException?e.result:'',r.notes.join(' | '),x.source,x.schedule,'attendance-export-v3'];});
+  var detailRows=details.map(function(x){var r=x.r,e=x.ev, verified=r.hasIn&&r.hasOut?hoursBetween(r.ngay,r.vao,r.ra):'', control=r.isException&&verified!==''?verified:e.result==='Tính theo giờ thực tế'?verified:0, proposed=e.result==='Tính theo giờ thực tế'?verified:0, ph=r.absentReason.indexOf('Phụ huynh xin nghỉ')===0, reminder=ph&&Number(r.reportedLate||0)>0?'PH xin nghỉ báo muộn '+r.reportedLate+' phút':'', note=r.notes.join(' | '), status=r.isException?'Chờ duyệt Exception':'Không có';return[payrollRowId(r),r.ma,r.ten,r.ngay,r.isException?'Ca đột xuất':'Ca lịch',r.ca,r.vao,r.ra,verified,proposed,e.result,e.reason,r.late||r.reportedLate||0,e.kpi,e.kpiReason,e.leave==='Trừ phép'?'Trừ phép':'Không trừ phép',e.leave==='Trừ phép'?r.absentReason:'',x.quota+'/4',status,note,x.source,x.schedule,PAYROLL_V4_VERSION,control,reminder];});
   return {detailRows:detailRows,summaryRows:summaryRows,weekRows:weekRows};
 }
 
@@ -951,11 +989,20 @@ function exportPayrollAttendanceCompactCsv(monthStr) { var d=getPayrollWorkbookD
 
 // Chốt bản copy để xem/xuất lại tháng cũ. Không xóa dữ liệu CHECK IN hiện hành.
 function chotThangAnToan(monthStr, replaceExisting) {
-  if (!/^\d\d\/\d{4}$/.test(String(monthStr||''))) return {ok:false,msg:'Tháng phải theo dạng MM/yyyy.'};
+  if (!/^(0[1-9]|1[0-2])\/\d{4}$/.test(String(monthStr||''))) return {ok:false,msg:'Tháng phải theo dạng MM/yyyy.'};
   var ss=SpreadsheetApp.getActiveSpreadsheet(), tag=monthStr.replace('/','-'), specs=[{from:'CHECK IN',to:'CHECK IN - Tháng '+tag},{from:'LICHLAM',to:'LICHLAM - Tháng '+tag}];
-  for(var i=0;i<specs.length;i++) { var old=ss.getSheetByName(specs[i].to); if(old && !replaceExisting) return {ok:false,exists:true,msg:'Đã có bản chốt tháng '+monthStr+'. Chọn Chốt lại nếu muốn thay bằng dữ liệu hiện tại.'}; }
-  specs.forEach(function(s){var old=ss.getSheetByName(s.to), src=ss.getSheetByName(s.from);if(!src)return;if(old)ss.deleteSheet(old);var copy=src.copyTo(ss);copy.setName(s.to);copy.setTabColor('#B8A38B');copy.getRange(1,1).setNote('🔒 BẢN ĐÃ CHỐT — không sửa trực tiếp | Tháng: '+monthStr+' | Chốt lúc: '+fmtDT(new Date()));copy.setFrozenRows(1);});
-  return {ok:true,msg:'✅ Đã chốt chấm công và lịch làm tháng '+monthStr+'. Các báo cáo xuất lại tháng này sẽ dùng đúng bản đã chốt.'};
+  for(var i=0;i<specs.length;i++) {
+    if(!ss.getSheetByName(specs[i].from)) return {ok:false,msg:'Thiếu sheet '+specs[i].from+'; chưa chốt được.'};
+    if(ss.getSheetByName(specs[i].to) && !replaceExisting) return {ok:false,exists:true,msg:'Đã có bản chốt tháng '+monthStr+'. Chọn Giữ bản cũ hoặc Chốt lại.'};
+  }
+  // Tạo bản tạm trước; lỗi bất kỳ bước nào không được xóa bản đã chốt cũ.
+  var copies=[];
+  try {
+    specs.forEach(function(s,idx){var copy=ss.getSheetByName(s.from).copyTo(ss);copies.push(copy);copy.setName('TAM_CHOT_'+tag+'_'+idx);});
+    specs.forEach(function(s,idx){var old=ss.getSheetByName(s.to);if(old)old.setName('CU_CHOT_'+tag+'_'+idx);copies[idx].setName(s.to);copies[idx].setTabColor('#B8A38B');copies[idx].getRange(1,1).setNote('🔒 BẢN ĐÃ CHỐT | Tháng: '+monthStr+' | Lúc: '+fmtDT(new Date()));copies[idx].setFrozenRows(1);});
+    specs.forEach(function(s,idx){var old=ss.getSheetByName('CU_CHOT_'+tag+'_'+idx);if(old)ss.deleteSheet(old);});
+    return {ok:true,msg:'Đã chốt chấm công và lịch tháng '+monthStr+'.'};
+  } catch(e) { Logger.log('Chốt tháng lỗi: '+e.message);return {ok:false,msg:'Chốt tháng chưa hoàn tất: '+e.message+'; kiểm tra các sheet TAM_CHOT/CU_CHOT, không xóa thủ công.'}; }
 }
 
 /* ---------- Quy tắc công/lương (chỉ đọc dữ liệu nguồn) ---------- */
@@ -998,6 +1045,7 @@ function evaluateAttendanceShift(s, annualMissedBefore, exceptionMissedBefore) {
     }
     var reason = s.absentReason || 'Vắng';
     var late = Number(s.reportedLate || 0);
+    if (reason.indexOf('Phụ huynh xin nghỉ') === 0) { no.reason = 'Phụ huynh xin nghỉ'; return no; }
     if (late > 0) {
       no.reason = reason + ' — báo vắng trễ ' + late + ' phút'; no.kpi = 'Có'; no.kpiReason = 'Báo vắng trễ ' + late + ' phút';
       if (reason === 'Ốm / việc gia đình') no.leave = 'Trừ phép';
@@ -1124,7 +1172,7 @@ function xuatBaoCaoSheet(thangStr) {
         errRows.push([ngay, ma, ten, ca, 'Đi làm trễ', tre + 'p', note]);
       }
       // 1b. VẮNG bấm muộn (>0 phút) — trừ KPI như đi trễ
-      if (loai === 'VẮNG' && tre > 0) {
+      if (loai === 'VẮNG' && tre > 0 && note.indexOf('Phụ huynh xin nghỉ') !== 0) {
         errRows.push([ngay, ma, ten, ca, 'Đi làm trễ (báo vắng muộn)', tre + 'p', note]);
       }
       // B6: VẮNG đúng giờ chỉ nằm ở bảng tổng hợp, KHÔNG ghi vào bảng lỗi.
@@ -1272,17 +1320,11 @@ function backupMotThang(prev) {
     // 2. Chốt cả lịch làm để tháng cũ không bị lệch theo lịch hiện tại.
     var shLich = ss.getSheetByName('LICHLAM');
     var newLichName = 'LICHLAM - Tháng ' + thangFile;
-    if (shLich && !ss.getSheetByName(newLichName)) {
-      shLich.copyTo(ss).setName(newLichName);
-    }
+    if (!shLich) return { ok: false, msg: 'Thiếu LICHLAM; chưa thể chốt đủ hai bản.' };
+    if (!ss.getSheetByName(newLichName)) shLich.copyTo(ss).setName(newLichName);
 
-    // 3. Xuất báo cáo tháng trước
-    xuatBaoCaoSheet(thangStr);
-
-    // 3. Xóa dữ liệu cũ trong sheet CHECK IN (giữ lại header)
-    if (shCheck && shCheck.getLastRow() > 1) {
-      shCheck.getRange(2, 1, shCheck.getLastRow() - 1, shCheck.getLastColumn()).clearContent();
-    }
+    // Chỉ giữ hai bản chốt. Không tạo thêm sheet báo cáo/lỗi và không xóa CHECK IN;
+    // báo cáo hiện hành vẫn có thể đọc lịch sử.
 
     // B6b: báo tin vào topic Check IN/OUT khi chốt tháng xong
     Logger.log('Da chot thang ' + thangStr + ' xong.');

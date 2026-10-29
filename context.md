@@ -4,7 +4,7 @@
 
 - Repo: `Aliuliu001/cham_cong_in-out_joy`
 - Branch: `main`
-- Commit push gần nhất trước đợt nâng cấp: `65a1ed3`.
+- Hợp đồng xuất v4: `HUONG_DAN_CHO_BOT_BANG_LUONG.md`; mẫu offline dữ liệu giả `Cham_cong_tinh_luong_11-2026_MAU_V4.xlsx`. Cần xác nhận file từ Apps Script thật trước khi Bot Bảng lương dùng tính.
 - App Bảng lương là repo riêng; Check IN/OUT chỉ xuất dữ liệu một chiều.
 - Plan chi tiết mới nhất: `.hermes/plans/2026-10-28_163000-cham-cong-bang-luong-plan-da-dieu-chinh.md`.
 

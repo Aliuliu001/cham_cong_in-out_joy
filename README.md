@@ -55,13 +55,13 @@ Quản lý chốt tháng sẽ tạo hai bản dễ nhận biết:
 
 Các bản này dùng để xuất lại tháng cũ mà không bị thay đổi theo lịch hiện tại. Hệ thống không tự ghi đè bản đã chốt.
 
-File Excel dự kiến cho Bảng lương có 3 sheet: `Tong hop GV`, `Chi tiet ca`, `Gio tuan`; các ngày trừ KPI/trừ phép đều ghi rõ ngày, ca và lý do. CSV 12 cột hiện có vẫn giữ để tương thích.
+File Excel v4 cho Bảng lương có 3 sheet: `Tong hop GV`, `Chi tiet ca` (25 cột, `attendance-export-v4`), `Gio tuan`; mẫu dữ liệu giả là `Cham_cong_tinh_luong_11-2026_MAU_V4.xlsx`. Các ngày KPI/phép ghi ngày, ca, lý do. CSV 12 cột cũ chỉ để tương thích, không dùng làm nguồn v4. Mẫu đã kiểm tra offline nhưng chưa được xác nhận bằng bản tải từ Apps Script thật. Xem `HUONG_DAN_CHO_BOT_BANG_LUONG.md`.
 
 ## Nhắc lịch làm việc qua Telegram (chưa bật trên Apps Script)
 
 Bot @joy_victini_bot gửi lịch ngày mai lúc khoảng 21:00 giờ Việt Nam, đọc từ `LICHLAM`. Bot này dùng nhóm và token RIÊNG, không dùng topic Check IN/OUT. Một ngày chỉ gửi một lần; nếu chưa có lịch, tin ghi rõ chưa xếp ca. Apps Script time trigger `atHour(21)` chạy trong khoảng 21:00–22:00, không bảo đảm đúng phút 21:00.
 
-Để bật khi đã có ID nhóm: trong Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, tự nhập `LICH_LAM_BOT_TOKEN` (mã mới sau `/revoke`) và `LICH_LAM_CHAT_ID` (ID nhóm Lịch làm việc); nếu có topic, thêm `LICH_LAM_THREAD_ID`. Không gửi token qua chat, không ghi vào code/GitHub. Sau khi dán Code.gs và lưu, chạy `setupLichLamTrigger()` một lần và cấp quyền, rồi kiểm tra nhật ký/tin trong nhóm. Thiếu token hoặc ID nhóm thì hàm không bật trigger; push GitHub một mình không bật bot.
+Để bật: trong Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, tự nhập `LICH_LAM_BOT_TOKEN` (mã mới sau `/revoke`) và `LICH_LAM_CHAT_ID` = `-1004452694903` (nhóm Lịch làm việc, không chia topic). Không cần `LICH_LAM_THREAD_ID`. Không gửi token qua chat, không ghi vào code/GitHub. Sau khi dán Code.gs và lưu, chạy `setupLichLamTrigger()` một lần và cấp quyền, rồi kiểm tra nhật ký/tin trong nhóm. Thiếu token hoặc ID nhóm thì hàm không bật trigger; push GitHub một mình không bật bot.
 
 ## Cài và triển khai
 
