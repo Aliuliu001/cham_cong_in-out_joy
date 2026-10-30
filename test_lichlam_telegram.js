@@ -19,7 +19,8 @@ const rows = [
  ['Mã NV','Họ tên','Ngày','Ca','Giờ bắt đầu','Giờ kết thúc'],
  ['001','Cô An','T6','Ca chiều','13:00','17:00'],
  ['002','Thầy Bình','24/10/2026','Ca riêng','08:00','11:00'],
- ['003','Cô C','T7','Ca sáng','07:30','10:30']
+ ['003','Cô C','T7','Ca sáng','07:30','10:30'],
+ ['004','Cô C','24/10/2026','Ca chiều','14:00','16:30']
 ];
 const props = {
   LICH_LAM_BOT_TOKEN:'schedule-token',
@@ -35,8 +36,8 @@ let result = env.s.sendTomorrowWorkSchedule(day);
 assert.equal(result.ok, true);
 assert.equal(env.sent.length, 1);
 assert.match(env.sent[0].opts.payload.text, /24\/10\/2026/);
-assert.match(env.sent[0].opts.payload.text, /Cô C/);
-assert.match(env.sent[0].opts.payload.text, /Thầy Bình/);
+assert.match(env.sent[0].opts.payload.text, /👤 Cô C \(2 ca\)\n   • 07:30–10:30 \| Ca sáng\n   • 14:00–16:30 \| Ca chiều/);
+assert.match(env.sent[0].opts.payload.text, /👤 Thầy Bình \(1 ca\)\n   • 08:00–11:00 \| Ca riêng/);
 assert.doesNotMatch(env.sent[0].opts.payload.text, /Cô An/);
 assert.equal(env.sent[0].opts.payload.chat_id, '-1004378772858');
 assert.equal(env.sent[0].opts.payload.message_thread_id, '50');

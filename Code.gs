@@ -108,9 +108,19 @@ function formatTomorrowWorkSchedule(now) {
     var kt = fmtTimeCell(r[nc >= 7 ? 6 : 5]);
     items.push({ten:String(r[1] || r[0]).trim(), ca:ca, bd:bd, kt:kt});
   }
-  items.sort(function(a, b) { return a.bd.localeCompare(b.bd) || a.ten.localeCompare(b.ten); });
+  var byTeacher = {};
+  items.forEach(function(x) {
+    if (!byTeacher[x.ten]) byTeacher[x.ten] = [];
+    byTeacher[x.ten].push(x);
+  });
+  var teachers = Object.keys(byTeacher).sort(function(a, b) { return a.localeCompare(b); });
+  var body = teachers.map(function(ten) {
+    var shifts = byTeacher[ten].sort(function(a, b) { return a.bd.localeCompare(b.bd) || a.kt.localeCompare(b.kt); });
+    return '👤 ' + ten + ' (' + shifts.length + ' ca)\n' +
+      shifts.map(function(x) { return '   • ' + x.bd + '–' + x.kt + ' | ' + x.ca; }).join('\n');
+  }).join('\n\n');
   return '📅 LỊCH LÀM VIỆC ' + dateText + '\n' +
-    (items.length ? items.map(function(x) { return '• ' + x.bd + '–' + x.kt + ' | ' + x.ten + ' | ' + x.ca; }).join('\n') : 'Hôm nay không có ca đã xếp.');
+    (items.length ? body : 'Hôm nay không có ca đã xếp.');
 }
 
 function guiLichLam_(now, markSent) {
