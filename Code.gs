@@ -554,6 +554,15 @@ function submitException(p) {
   }
   var blob=Utilities.newBlob(Utilities.base64Decode(p.photo),'image/jpeg',p.ma+'_'+fmtFile(now)+'_'+type+'.jpg'), url=getFolder().createFile(blob).getUrl();
   sh.appendRow([p.ma,p.ten,fmtD(now),ca,type,type==='EXCEPTION_IN'?cellHM(now):'',type==='EXCEPTION_OUT'?cellHM(now):'',0,'Exception | '+p.reason+' | ID:'+uid,url,dist,p.device||'']);
+
+  // Ca đột xuất cũng phải báo đúng topic Check IN/OUT, kèm ảnh giống ca lịch.
+  // Gửi lỗi không được làm hỏng thao tác chấm công đã ghi vào Sheet.
+  var action = type === 'EXCEPTION_IN' ? 'VÀO' : 'RA';
+  var time = cellHM(now);
+  var notice = '🟣 ' + time + ' — ' + p.ten + ' (' + p.ma + ') ' + action +
+    ' CA ĐỘT XUẤT: ' + ca + (type === 'EXCEPTION_OUT' ? ' (chờ quản lý duyệt)' : '');
+  guiAnhTelegram(p.photo, notice);
+
   return {ok:true,msg:type==='EXCEPTION_IN'?'Đã CHECK IN CA ĐỘT XUẤT. Khi xong việc bấm lại CA ĐỘT XUẤT để CHECK OUT.':'Đã CHECK OUT CA ĐỘT XUẤT. Ca này chờ quản lý duyệt.',type:type};
 }
 
