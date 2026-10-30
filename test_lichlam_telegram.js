@@ -21,8 +21,15 @@ const rows = [
  ['002','Thầy Bình','24/10/2026','Ca riêng','08:00','11:00'],
  ['003','Cô C','T7','Ca sáng','07:30','10:30']
 ];
-const env = create(rows, {LICH_LAM_BOT_TOKEN:'test-token', LICH_LAM_CHAT_ID:'-100123'});
-assert.equal(typeof env.s.sendTomorrowWorkSchedule, 'function');
+const props = {
+  LICH_LAM_BOT_TOKEN:'schedule-token',
+  LICH_LAM_CHAT_ID:'-1003955550981',
+  LICH_LAM_THREAD_ID:'50',
+  TELEGRAM_BOT_TOKEN:'checkin-token',
+  CHECKIN_TELEGRAM_CHAT_ID:'-100777',
+  CHECKIN_TELEGRAM_THREAD_ID:'77'
+};
+const env = create(rows, props);
 const day = new Date(2026, 9, 23, 21, 0); // Friday, send Saturday 24th
 let result = env.s.sendTomorrowWorkSchedule(day);
 assert.equal(result.ok, true);
@@ -31,12 +38,28 @@ assert.match(env.sent[0].opts.payload.text, /24\/10\/2026/);
 assert.match(env.sent[0].opts.payload.text, /Cô C/);
 assert.match(env.sent[0].opts.payload.text, /Thầy Bình/);
 assert.doesNotMatch(env.sent[0].opts.payload.text, /Cô An/);
-assert.equal(env.sent[0].opts.payload.chat_id, '-100123');
+assert.equal(env.sent[0].opts.payload.chat_id, '-1003955550981');
+assert.equal(env.sent[0].opts.payload.message_thread_id, '50');
 result = env.s.sendTomorrowWorkSchedule(day);
 assert.equal(result.skipped, true);
 assert.equal(env.sent.length, 1);
-const missing = create(rows, {});
-result = missing.s.sendTomorrowWorkSchedule(day);
-assert.equal(result.ok, false);
-assert.equal(missing.sent.length, 0);
-console.log('PASS: tomorrow schedule, correct group, no duplicate, missing config safe');
+
+// Manual schedule test sends now but never creates the daily "already sent" marker.
+const manual = create(rows, props);
+result = manual.s.testGuiLichLamNow(day);
+assert.equal(result.ok, true);
+assert.equal(manual.sent.length, 1);
+assert.equal(manual.sent[0].opts.payload.chat_id, '-1003955550981');
+assert.equal(manual.sent[0].opts.payload.message_thread_id, '50');
+assert.equal(Object.keys(manual.state).filter(k => k.startsWith('LICH_LAM_SENT_')).length, 0);
+
+// Check-in destination must be configured separately and missing destination must be safe.
+const checkin = create(rows, props);
+assert.match(checkin.s.guiTinTelegram('Test check-in'), /ok/);
+assert.equal(checkin.sent.length, 1);
+assert.equal(checkin.sent[0].opts.payload.chat_id, '-100777');
+assert.equal(checkin.sent[0].opts.payload.message_thread_id, '77');
+const noCheckinDestination = create(rows, {TELEGRAM_BOT_TOKEN:'checkin-token'});
+assert.equal(noCheckinDestination.s.guiTinTelegram('Do not send'), 'THIEU DIA CHI NHAN');
+assert.equal(noCheckinDestination.sent.length, 0);
+console.log('PASS: schedule topic, manual no-marker test, check-in destination and missing config safety');

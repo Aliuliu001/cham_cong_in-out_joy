@@ -11,19 +11,27 @@ var DRIVE_FOLDER = 'CHECK IN - ANH NHAN VIEN';
 var TZ = 'Asia/Ho_Chi_Minh';
 
 /* ---------- Báo tin Telegram (topic Check IN/OUT) ---------- */
-// Chìa khóa bot KHÔNG nằm trong code này.
-// Bạn dán chìa khóa vào: Apps Script > Cài đặt dự án > Thuộc tính tập lệnh (Script Properties)
-// Thêm 1 dòng: Tên = TELEGRAM_BOT_TOKEN, Giá trị = dãy chữ của bot phụ.
-var TELEGRAM_CHAT_ID = '-1003955550981';
-var TELEGRAM_THREAD_ID = '665'; // topic Check IN/OUT trong nhóm joy_office
+// Chìa khóa và địa chỉ nhận tin đều nằm trong Script Properties, không ghi vào code/GitHub.
+// TELEGRAM_BOT_TOKEN: token @joy_chamcong_bot.
+// CHECKIN_TELEGRAM_CHAT_ID + CHECKIN_TELEGRAM_THREAD_ID: group/topic Check In/Out hiện dùng.
+function diaChiNhanCheckIn_() {
+  var props = PropertiesService.getScriptProperties();
+  return {
+    chat: props.getProperty('CHECKIN_TELEGRAM_CHAT_ID') || '',
+    thread: props.getProperty('CHECKIN_TELEGRAM_THREAD_ID') || ''
+  };
+}
 
 function guiTinTelegram(text) {
   try {
-    var token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN') || '';
+    var props = PropertiesService.getScriptProperties();
+    var token = props.getProperty('TELEGRAM_BOT_TOKEN') || '';
+    var dest = diaChiNhanCheckIn_();
     if (!token) { Logger.log('THIEU TOKEN: chua nhap TELEGRAM_BOT_TOKEN'); return 'THIEU TOKEN'; }
+    if (!dest.chat || !dest.thread) { Logger.log('THIEU DIA CHI NHAN CHECK IN/OUT'); return 'THIEU DIA CHI NHAN'; }
     var resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
       method: 'post',
-      payload: { chat_id: TELEGRAM_CHAT_ID, message_thread_id: TELEGRAM_THREAD_ID, text: text },
+      payload: { chat_id: dest.chat, message_thread_id: dest.thread, text: text },
       muteHttpExceptions: true
     });
     Logger.log('GUI TIN: ' + resp.getContentText());
@@ -31,15 +39,38 @@ function guiTinTelegram(text) {
   } catch (e) { Logger.log('LOI GUI TIN: ' + e.message); return 'LOI: ' + e.message; }
 }
 
+// Chạy sau khi anh gửi một tin trong topic 🕘 Check In/ Out bằng @joy_chamcong_bot.
+// Hàm chỉ hiện tên nhóm, ID nhóm và ID topic trong Nhật ký; không in token.
+function layDiaChiNhanCheckIn() {
+  var token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN') || '';
+  if (!token) return 'Chưa nhập TELEGRAM_BOT_TOKEN trong Script Properties.';
+  var resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/getUpdates', {muteHttpExceptions:true});
+  var data = JSON.parse(resp.getContentText());
+  if (!data.ok) return 'Không đọc được tin bot: kiểm tra token rồi thử lại.';
+  var msgs = (data.result || []).map(function(x) { return x.message || x.channel_post || {}; })
+    .filter(function(m) { return m.chat && (m.chat.type === 'group' || m.chat.type === 'supergroup') && m.message_thread_id; });
+  if (!msgs.length) return 'Chưa thấy tin trong topic. Gửi @joy_chamcong_bot test vào topic Check In/ Out rồi chạy lại.';
+  var m = msgs[msgs.length - 1];
+  var text = 'Nơi nhận gần nhất: ' + m.chat.title + ' | Group ID: ' + m.chat.id + ' | Topic ID: ' + m.message_thread_id;
+  Logger.log(text);
+  return text;
+}
+
+function testGuiTinCheckIn() {
+  return guiTinTelegram('🤖 Test Check In/Out: ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'));
+}
+
 function guiAnhTelegram(photoB64, caption) {
   try {
-    var token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_BOT_TOKEN') || '';
-    if (!token) return;
+    var props = PropertiesService.getScriptProperties();
+    var token = props.getProperty('TELEGRAM_BOT_TOKEN') || '';
+    var dest = diaChiNhanCheckIn_();
+    if (!token || !dest.chat || !dest.thread) { guiTinTelegram(caption); return; }
     if (!photoB64) { guiTinTelegram(caption); return; }
     var blob = Utilities.newBlob(Utilities.base64Decode(photoB64), 'image/jpeg', 'checkin.jpg');
     UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendPhoto', {
       method: 'post',
-      payload: { chat_id: TELEGRAM_CHAT_ID, message_thread_id: TELEGRAM_THREAD_ID,
+      payload: { chat_id: dest.chat, message_thread_id: dest.thread,
         caption: caption, photo: blob },
       muteHttpExceptions: true
     });
@@ -82,28 +113,36 @@ function formatTomorrowWorkSchedule(now) {
     (items.length ? items.map(function(x) { return '• ' + x.bd + '–' + x.kt + ' | ' + x.ten + ' | ' + x.ca; }).join('\n') : 'Hôm nay không có ca đã xếp.');
 }
 
-function sendTomorrowWorkSchedule(now) {
+function guiLichLam_(now, markSent) {
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty('LICH_LAM_BOT_TOKEN');
   var chat = props.getProperty('LICH_LAM_CHAT_ID');
-  if (!token || !chat) { Logger.log('Chưa có LICH_LAM_BOT_TOKEN/LICH_LAM_CHAT_ID'); return {ok:false, msg:'Thiếu cấu hình bot hoặc nhóm lịch.'}; }
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) return {ok:false, msg:'Đang gửi lịch ở phiên khác.'};
+  var thread = props.getProperty('LICH_LAM_THREAD_ID');
+  if (!token || !chat || !thread) { Logger.log('Thiếu LICH_LAM_BOT_TOKEN/LICH_LAM_CHAT_ID/LICH_LAM_THREAD_ID'); return {ok:false, msg:'Thiếu cấu hình bot, nhóm hoặc topic lịch.'}; }
+  var current = now || new Date(), next = new Date(current.getTime());
+  next.setDate(next.getDate() + 1);
+  var key = 'LICH_LAM_SENT_' + Utilities.formatDate(next, TZ, 'dd/MM/yyyy');
+  if (markSent && props.getProperty(key)) return {ok:true, skipped:true, msg:'Lịch ngày mai đã gửi.'};
   try {
-    var current = now || new Date(), next = new Date(current.getTime());
-    next.setDate(next.getDate() + 1);
-    var key = 'LICH_LAM_SENT_' + Utilities.formatDate(next, TZ, 'dd/MM/yyyy');
-    if (props.getProperty(key)) return {ok:true, skipped:true, msg:'Lịch ngày mai đã gửi.'};
-    var payload = {chat_id:chat, text:formatTomorrowWorkSchedule(current)};
-    var thread = props.getProperty('LICH_LAM_THREAD_ID');
-    if (thread) payload.message_thread_id = thread;
+    var payload = {chat_id:chat, message_thread_id:thread, text:formatTomorrowWorkSchedule(current)};
     var resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {method:'post', payload:payload, muteHttpExceptions:true});
     var body = JSON.parse(resp.getContentText());
-    if (resp.getResponseCode() !== 200 || !body.ok) { Logger.log('Không gửi được lịch: ' + resp.getResponseCode()); return {ok:false, msg:'Telegram chưa nhận lịch; kiểm tra bot và ID nhóm.'}; }
-    props.setProperty(key, 'sent');
-    return {ok:true, msg:'Đã gửi lịch ngày ' + Utilities.formatDate(next, TZ, 'dd/MM/yyyy')};
+    if (resp.getResponseCode() !== 200 || !body.ok) { Logger.log('Không gửi được lịch: ' + resp.getResponseCode()); return {ok:false, msg:'Telegram chưa nhận lịch; kiểm tra bot và địa chỉ topic.'}; }
+    if (markSent) props.setProperty(key, 'sent');
+    return {ok:true, msg:markSent ? 'Đã gửi lịch ngày ' + Utilities.formatDate(next, TZ, 'dd/MM/yyyy') : 'Đã gửi tin kiểm tra lịch.'};
   } catch(e) { Logger.log('Lỗi gửi lịch: ' + e.message); return {ok:false, msg:e.message}; }
+}
+
+function sendTomorrowWorkSchedule(now) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return {ok:false, msg:'Đang gửi lịch ở phiên khác.'};
+  try { return guiLichLam_(now, true); }
   finally { lock.releaseLock(); }
+}
+
+// Dùng để thử gửi NGAY BÂY GIỜ. Không đánh dấu lịch đã gửi, không ảnh hưởng trigger 21h.
+function testGuiLichLamNow() {
+  return guiLichLam_(new Date(), false);
 }
 
 // Chạy thủ công một lần sau khi gửi /id@joy_victini_bot trong nhóm.
@@ -124,13 +163,15 @@ function layIdNhomLichLam() {
 
 function setupLichLamTrigger() {
   var props = PropertiesService.getScriptProperties();
-  if (!props.getProperty('LICH_LAM_BOT_TOKEN') || !props.getProperty('LICH_LAM_CHAT_ID'))
-    return {ok:false, msg:'Nhập token và ID nhóm vào Script Properties trước.'};
-  if (props.getProperty('LICH_LAM_CHAT_ID') !== '-1004452694903')
-    return {ok:false, msg:'ID nhóm chưa khớp nhóm Lịch làm việc. Không bật lịch để tránh gửi nhầm.'};
+  var chat = props.getProperty('LICH_LAM_CHAT_ID');
+  var thread = props.getProperty('LICH_LAM_THREAD_ID');
+  if (!props.getProperty('LICH_LAM_BOT_TOKEN') || !chat || !thread)
+    return {ok:false, msg:'Nhập token, ID nhóm và ID topic lịch trong Script Properties trước.'};
+  if (chat !== '-1003955550981' || thread !== '50')
+    return {ok:false, msg:'Địa chỉ chưa khớp Office – Joy / topic Lịch làm việc. Không bật lịch để tránh gửi nhầm.'};
   var found = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'sendTomorrowWorkSchedule'; });
   if (!found) ScriptApp.newTrigger('sendTomorrowWorkSchedule').timeBased().everyDays(1).atHour(21).create();
-  return {ok:true, msg:found ? 'Trigger lịch đã có.' : 'Đã bật gửi lịch khoảng 21:00 giờ Việt Nam mỗi tối.'};
+  return {ok:true, msg:found ? 'Trigger lịch đã có.' : 'Đã bật gửi lịch khoảng 21:00–22:00 giờ Việt Nam mỗi tối.'};
 }
 
 /* ---------- Web ---------- */

@@ -57,11 +57,27 @@ Các bản này dùng để xuất lại tháng cũ mà không bị thay đổi 
 
 File Excel v4 cho Bảng lương có 3 sheet: `Tong hop GV`, `Chi tiet ca` (25 cột, `attendance-export-v4`), `Gio tuan`; mẫu dữ liệu giả là `Cham_cong_tinh_luong_11-2026_MAU_V4.xlsx`. Các ngày KPI/phép ghi ngày, ca, lý do. CSV 12 cột cũ chỉ để tương thích, không dùng làm nguồn v4. Mẫu đã kiểm tra offline nhưng chưa được xác nhận bằng bản tải từ Apps Script thật. Xem `HUONG_DAN_CHO_BOT_BANG_LUONG.md`.
 
-## Nhắc lịch làm việc qua Telegram (chưa bật trên Apps Script)
+## Telegram: Lịch làm việc và Check In/Out
 
-Bot @joy_victini_bot gửi lịch ngày mai lúc khoảng 21:00 giờ Việt Nam, đọc từ `LICHLAM`. Bot này dùng nhóm và token RIÊNG, không dùng topic Check IN/OUT. Một ngày chỉ gửi một lần; nếu chưa có lịch, tin ghi rõ chưa xếp ca. Apps Script time trigger `atHour(21)` chạy trong khoảng 21:00–22:00, không bảo đảm đúng phút 21:00.
+### Lịch làm việc
 
-Để bật: trong Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, tự nhập `LICH_LAM_BOT_TOKEN` (mã mới sau `/revoke`) và `LICH_LAM_CHAT_ID` = `-1004452694903` (nhóm Lịch làm việc, không chia topic). Không cần `LICH_LAM_THREAD_ID`. Không gửi token qua chat, không ghi vào code/GitHub. Sau khi dán Code.gs và lưu, chạy `setupLichLamTrigger()` một lần và cấp quyền, rồi kiểm tra nhật ký/tin trong nhóm. Thiếu token hoặc ID nhóm thì hàm không bật trigger; push GitHub một mình không bật bot.
+Bot `@joy_victini_bot` gửi lịch ngày mai vào topic `📅 Lịch làm việc` của nhóm Office – Joy. Bot đọc từ `LICHLAM`; nếu chưa có lịch, tin ghi rõ chưa xếp ca. Một ngày chỉ gửi một lần. Trigger `atHour(21)` chạy trong khoảng 21:00–22:00 giờ Việt Nam, không bảo đảm đúng phút 21:00.
+
+Trong **Apps Script → Cài đặt dự án → Thuộc tính tập lệnh**, giữ token riêng `LICH_LAM_BOT_TOKEN` và điền:
+- `LICH_LAM_CHAT_ID` = `-1003955550981`
+- `LICH_LAM_THREAD_ID` = `50`
+
+Muốn gửi thử ngay, chạy `testGuiLichLamNow()`. Hàm này không đánh dấu lịch đã gửi nên không ảnh hưởng tin tự động buổi tối. Chỉ sau khi nhìn thấy tin trong đúng topic mới chạy `setupLichLamTrigger()` để kiểm tra/bật lịch tự động.
+
+### Check In/Out
+
+Bot `@joy_chamcong_bot` chỉ gửi IN/OUT/VẮNG và ảnh vào topic `🕘 Check In/ Out` thuộc group Office - Quản Lí. Các địa chỉ nhận không còn viết cứng trong Code.gs. Trong Script Properties, giữ `TELEGRAM_BOT_TOKEN` rồi thêm:
+- `CHECKIN_TELEGRAM_CHAT_ID` = ID số group Office - Quản Lí
+- `CHECKIN_TELEGRAM_THREAD_ID` = ID số topic Check In/Out
+
+Sau khi đã gửi một tin trong topic bằng `@joy_chamcong_bot`, chạy `layDiaChiNhanCheckIn()` để đọc tên group, Group ID và Topic ID trong Nhật ký; kiểm tra đúng tên trước khi chép hai ID vào cài đặt. Chạy `testGuiTinCheckIn()` để gửi đúng một tin thử. Thiếu địa chỉ nhận thì bot dừng an toàn, không gửi nhầm sang Office – Joy.
+
+Không gửi token qua chat, không ghi token vào code/GitHub. Push GitHub không tự cập nhật Apps Script: dán Code.gs → Lưu → **Triển khai → Quản lý các lượt triển khai → Phiên bản mới → Triển khai**.
 
 ## Cài và triển khai
 
