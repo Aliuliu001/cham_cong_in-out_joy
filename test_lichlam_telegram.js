@@ -23,7 +23,7 @@ const rows = [
 ];
 const props = {
   LICH_LAM_BOT_TOKEN:'schedule-token',
-  LICH_LAM_CHAT_ID:'-1003955550981',
+  LICH_LAM_CHAT_ID:'-1004378772858',
   LICH_LAM_THREAD_ID:'50',
   TELEGRAM_BOT_TOKEN:'checkin-token',
   CHECKIN_TELEGRAM_CHAT_ID:'-100777',
@@ -38,7 +38,7 @@ assert.match(env.sent[0].opts.payload.text, /24\/10\/2026/);
 assert.match(env.sent[0].opts.payload.text, /Cô C/);
 assert.match(env.sent[0].opts.payload.text, /Thầy Bình/);
 assert.doesNotMatch(env.sent[0].opts.payload.text, /Cô An/);
-assert.equal(env.sent[0].opts.payload.chat_id, '-1003955550981');
+assert.equal(env.sent[0].opts.payload.chat_id, '-1004378772858');
 assert.equal(env.sent[0].opts.payload.message_thread_id, '50');
 result = env.s.sendTomorrowWorkSchedule(day);
 assert.equal(result.skipped, true);
@@ -49,7 +49,7 @@ const manual = create(rows, props);
 result = manual.s.testGuiLichLamNow(day);
 assert.equal(result.ok, true);
 assert.equal(manual.sent.length, 1);
-assert.equal(manual.sent[0].opts.payload.chat_id, '-1003955550981');
+assert.equal(manual.sent[0].opts.payload.chat_id, '-1004378772858');
 assert.equal(manual.sent[0].opts.payload.message_thread_id, '50');
 assert.equal(Object.keys(manual.state).filter(k => k.startsWith('LICH_LAM_SENT_')).length, 0);
 

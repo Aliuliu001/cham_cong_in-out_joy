@@ -64,7 +64,7 @@ File Excel v4 cho Bảng lương có 3 sheet: `Tong hop GV`, `Chi tiet ca` (25 c
 Bot `@joy_victini_bot` gửi lịch ngày mai vào topic `📅 Lịch làm việc` của nhóm Office – Joy. Bot đọc từ `LICHLAM`; nếu chưa có lịch, tin ghi rõ chưa xếp ca. Một ngày chỉ gửi một lần. Trigger `atHour(21)` chạy trong khoảng 21:00–22:00 giờ Việt Nam, không bảo đảm đúng phút 21:00.
 
 Trong **Apps Script → Cài đặt dự án → Thuộc tính tập lệnh**, giữ token riêng `LICH_LAM_BOT_TOKEN` và điền:
-- `LICH_LAM_CHAT_ID` = `-1003955550981`
+- `LICH_LAM_CHAT_ID` = `-1004378772858`
 - `LICH_LAM_THREAD_ID` = `50`
 
 Muốn gửi thử ngay, chạy `testGuiLichLamNow()`. Hàm này không đánh dấu lịch đã gửi nên không ảnh hưởng tin tự động buổi tối. Chỉ sau khi nhìn thấy tin trong đúng topic mới chạy `setupLichLamTrigger()` để kiểm tra/bật lịch tự động.

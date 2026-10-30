@@ -184,7 +184,7 @@ function setupLichLamTrigger() {
   var thread = props.getProperty('LICH_LAM_THREAD_ID');
   if (!props.getProperty('LICH_LAM_BOT_TOKEN') || !chat || !thread)
     return {ok:false, msg:'Nhập token, ID nhóm và ID topic lịch trong Script Properties trước.'};
-  if (chat !== '-1003955550981' || thread !== '50')
+  if (chat !== '-1004378772858' || thread !== '50')
     return {ok:false, msg:'Địa chỉ chưa khớp Office – Joy / topic Lịch làm việc. Không bật lịch để tránh gửi nhầm.'};
   var found = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'sendTomorrowWorkSchedule'; });
   if (!found) ScriptApp.newTrigger('sendTomorrowWorkSchedule').timeBased().everyDays(1).atHour(21).create();
