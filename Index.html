@@ -113,8 +113,9 @@ function chon(t) {
   document.getElementById('tVang').className = t === 'VANG' ? 'on-vang' : '';
   document.getElementById('tEx').className = t === 'EXCEPTION' ? 'on-ex' : '';
   document.getElementById('btn').textContent = t === 'OUT' ? 'XÁC NHẬN CHECK OUT' : t === 'VANG' ? 'XÁC NHẬN BÁO VẮNG' : t === 'EXCEPTION' ? '🟣 XÁC NHẬN EXCEPTION' : 'XÁC NHẬN CHECK IN';
-  document.getElementById('lydoWrap').style.display = t === 'VANG' ? '' : 'none';
-  document.getElementById('exceptionWrap').style.display = t === 'EXCEPTION' ? '' : 'none';
+  // Hai khung này bị CSS mặc định ẩn; phải đặt block rõ ràng khi được chọn.
+  document.getElementById('lydoWrap').style.display = t === 'VANG' ? 'block' : 'none';
+  document.getElementById('exceptionWrap').style.display = t === 'EXCEPTION' ? 'block' : 'none';
   document.getElementById('camWrap').style.display = t === 'VANG' ? 'none' : '';
   checkReady();
 }
