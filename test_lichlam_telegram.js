@@ -35,6 +35,12 @@ const day = new Date(2026, 9, 23, 21, 0); // Friday, send Saturday 24th
 let result = env.s.sendTomorrowWorkSchedule(day);
 assert.equal(result.ok, true);
 assert.equal(env.sent.length, 1);
+
+// Apps Script time triggers pass an event object, not a Date; this must still use the current time safely.
+const triggerEvent = create(rows, props);
+result = triggerEvent.s.sendTomorrowWorkSchedule({triggerUid:'scheduled'});
+assert.equal(result.ok, true);
+assert.equal(triggerEvent.sent.length, 1);
 assert.match(env.sent[0].opts.payload.text, /24\/10\/2026/);
 assert.match(env.sent[0].opts.payload.text, /👤 Cô C \(2 ca\)\n   • 07:30–10:30 \| Ca sáng\n   • 14:00–16:30 \| Ca chiều/);
 assert.match(env.sent[0].opts.payload.text, /👤 Thầy Bình \(1 ca\)\n   • 08:00–11:00 \| Ca riêng/);

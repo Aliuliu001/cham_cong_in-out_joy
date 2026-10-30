@@ -129,7 +129,9 @@ function guiLichLam_(now, markSent) {
   var chat = props.getProperty('LICH_LAM_CHAT_ID');
   var thread = props.getProperty('LICH_LAM_THREAD_ID');
   if (!token || !chat || !thread) { Logger.log('Thiếu LICH_LAM_BOT_TOKEN/LICH_LAM_CHAT_ID/LICH_LAM_THREAD_ID'); return {ok:false, msg:'Thiếu cấu hình bot, nhóm hoặc topic lịch.'}; }
-  var current = now || new Date(), next = new Date(current.getTime());
+  // Khi Apps Script tự chạy trigger, tham số là event object chứ không phải Date.
+  var current = now && typeof now.getTime === 'function' ? now : new Date();
+  var next = new Date(current.getTime());
   next.setDate(next.getDate() + 1);
   var key = 'LICH_LAM_SENT_' + Utilities.formatDate(next, TZ, 'dd/MM/yyyy');
   if (markSent && props.getProperty(key)) return {ok:true, skipped:true, msg:'Lịch ngày mai đã gửi.'};
