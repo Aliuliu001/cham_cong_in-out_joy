@@ -488,7 +488,7 @@ function submitCheckin(p) {
   // Báo tin vào topic Check IN/OUT (kèm ảnh). Gửi lỗi cũng không chặn chấm công.
   var chu = p.type === 'IN' ? 'VÀO' : 'RA';
   var tin = '🟢 ' + cellHM(gioCham) + ' — ' + p.ten + ' (' + p.ma + ') ' + chu +
-    ' ca ' + (p.caLabel || '?') +
+    ' ca ' + (p.caLabel || 'chưa xác định') +
     (p.type === 'IN' && lateMin > 0 ? ', trễ ' + lateMin + 'p' : '') +
     (p.type === 'IN' && !lateMin ? ', đúng giờ' : '');
   guiAnhTelegram(p.type === 'IN' ? p.photo : '', tin);
@@ -538,32 +538,30 @@ function getExceptionStatus(ma) {
 }
 function submitException(p) {
   if (!p.ma || !p.ten || !p.reason) return { ok:false, msg:'Bạn chọn mã, tên và lý do giúp mình.' };
-  if (!p.lat || !p.lng || !p.photo) return { ok:false, msg:'Ca đột xuất cần GPS và ảnh.' };
+  if (p.action !== 'IN' && p.action !== 'OUT') return { ok:false, msg:'Bạn chọn VÀO hoặc RA ca Exception giúp mình.' };
+  if (!p.lat || !p.lng || !p.photo) return { ok:false, msg:'Ca Exception cần GPS và ảnh.' };
   var now = new Date(p.submitTs || new Date().getTime()), dist=Math.round(haversine(p.lat,p.lng,CENTER_LAT,CENTER_LNG));
   if (dist > RADIUS_M) return {ok:false,msg:'Bạn đang ngoài khu vực check-in: '+dist+' m.'};
   var sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN'), rows=sh.getDataRange().getDisplayValues(), open=null;
-  // Sự kiện Exception gần nhất quyết định đang mở hay đã đóng; không mở chồng hai ca.
-  for(var i=rows.length-1;i>=1;i--) if(String(rows[i][0]).trim()===p.ma && (rows[i][4]==='EXCEPTION_IN'||rows[i][4]==='EXCEPTION_OUT')) { if(rows[i][4]==='EXCEPTION_IN') open=rows[i]; break; }
-  var type=open?'EXCEPTION_OUT':'EXCEPTION_IN', ca='Ca đột xuất — '+p.reason;
+  for(var i=rows.length-1;i>=1;i--) if(String(rows[i][0]).trim()===String(p.ma).trim() && (rows[i][4]==='EXCEPTION_IN'||rows[i][4]==='EXCEPTION_OUT')) { if(rows[i][4]==='EXCEPTION_IN') open=rows[i]; break; }
+  if (p.action === 'IN' && open) return {ok:false,msg:'Bạn đang có một ca Exception chưa RA. Hãy chọn RA ca Exception để kết thúc ca đó.'};
+  if (p.action === 'OUT' && !open) return {ok:false,msg:'Chưa có ca Exception đang mở để RA.'};
+  var type=p.action === 'IN' ? 'EXCEPTION_IN' : 'EXCEPTION_OUT', ca='Ca Exception — '+p.reason;
   var id=open && String(open[8]).match(/ID:(EX-[A-Za-z0-9-]+)/);
   var uid=id ? id[1] : 'EX-' + now.getTime() + '-' + Utilities.getUuid().replace(/-/g,'').slice(0,8);
   if(open) ca=String(open[3]);
+  var reasonText = open ? ca.replace(/^Ca Exception\s*[—-]\s*/, '') : p.reason;
   if(type==='EXCEPTION_IN') {
     var cv=sh.getDataRange().getDisplayValues();
-    for(var q=1;q<cv.length;q++) if(String(cv[q][0]).trim()===String(p.ma).trim() && cellDay(cv[q][2])===fmtD(now) && cv[q][4]==='IN') return {ok:false,msg:'Đang có ca lịch; không mở ca đột xuất trùng giờ.'};
+    for(var q=1;q<cv.length;q++) if(String(cv[q][0]).trim()===String(p.ma).trim() && cellDay(cv[q][2])===fmtD(now) && cv[q][4]==='IN') return {ok:false,msg:'Đang có ca lịch; không mở ca Exception trùng giờ.'};
   }
   var blob=Utilities.newBlob(Utilities.base64Decode(p.photo),'image/jpeg',p.ma+'_'+fmtFile(now)+'_'+type+'.jpg'), url=getFolder().createFile(blob).getUrl();
   sh.appendRow([p.ma,p.ten,fmtD(now),ca,type,type==='EXCEPTION_IN'?cellHM(now):'',type==='EXCEPTION_OUT'?cellHM(now):'',0,'Exception | '+p.reason+' | ID:'+uid,url,dist,p.device||'']);
-
-  // Ca đột xuất cũng phải báo đúng topic Check IN/OUT, kèm ảnh giống ca lịch.
-  // Gửi lỗi không được làm hỏng thao tác chấm công đã ghi vào Sheet.
   var action = type === 'EXCEPTION_IN' ? 'VÀO' : 'RA';
-  var time = cellHM(now);
-  var notice = '🟣 ' + time + ' — ' + p.ten + ' (' + p.ma + ') ' + action +
-    ' CA ĐỘT XUẤT: ' + ca + (type === 'EXCEPTION_OUT' ? ' (chờ quản lý duyệt)' : '');
+  var notice = '🟣 ' + cellHM(now) + ' — ' + p.ten + ' (' + p.ma + ') ' + action +
+    ' CA EXCEPTION — ' + reasonText + (type === 'EXCEPTION_OUT' ? ' (chờ quản lý duyệt)' : '');
   guiAnhTelegram(p.photo, notice);
-
-  return {ok:true,msg:type==='EXCEPTION_IN'?'Đã CHECK IN CA ĐỘT XUẤT. Khi xong việc bấm lại CA ĐỘT XUẤT để CHECK OUT.':'Đã CHECK OUT CA ĐỘT XUẤT. Ca này chờ quản lý duyệt.',type:type};
+  return {ok:true,msg:type==='EXCEPTION_IN'?'Đã VÀO CA EXCEPTION. Khi xong việc, chọn RA ca Exception.':'Đã RA CA EXCEPTION. Ca này chờ quản lý duyệt.',type:type};
 }
 
 /* ---------- Báo cáo ngày / tháng ---------- */
@@ -1458,6 +1456,10 @@ function setupTrigger() {
 function submitBaoVang(p) {
   if (!p.ma || !p.ten) return { ok: false, msg: 'Vui lòng chọn mã và tên nhân viên.' };
   if (!p.caLabel) return { ok: false, msg: 'Vui lòng chọn ca cần báo vắng.' };
+  var lyDoNhap = String(p.lyDo || '').trim();
+  if (!lyDoNhap) return { ok: false, msg: 'Vui lòng chọn hoặc ghi lý do vắng.' };
+  var lyDoMacDinh = ['Phụ huynh xin nghỉ lớp', 'Nghỉ phép (Đã báo trước)'];
+  if (lyDoMacDinh.indexOf(lyDoNhap) < 0 && lyDoNhap.length > 200) return { ok: false, msg: 'Lý do vắng tối đa 200 ký tự.' };
 
   // Giờ báo = giờ bấm nút VẮNG, giống check-in (không dùng giờ mở trang).
   var nowTs = p.submitTs || p.openTs || new Date().getTime();
@@ -1491,11 +1493,11 @@ function submitBaoVang(p) {
     treVang = Math.max(0, Math.round((nowTs - chuan) / 60000));
   }
 
-  var lyDo = p.lyDo || 'Phụ huynh xin nghỉ';
+  var lyDo = lyDoNhap;
   var baoTruoc = treVang === 0;
-  var ghiChu = lyDo + (baoTruoc && lyDo === 'Ốm / việc gia đình' ? ' | Trừ phép' : baoTruoc && lyDo === 'Phụ huynh xin nghỉ' ? ' | PH xin nghỉ — báo trước' : '') + ' (Báo vắng từ xa: ' + fmtDT(gioBao) + ')';
+  var ghiChu = lyDo + (baoTruoc && lyDo === 'Nghỉ phép (Đã báo trước)' ? ' | Trừ phép' : baoTruoc && lyDo === 'Phụ huynh xin nghỉ lớp' ? ' | PH xin nghỉ — báo trước' : '') + ' (Báo vắng từ xa: ' + fmtDT(gioBao) + ')';
   if (treVang > 0) ghiChu += ' | Báo vắng trễ ' + treVang + ' phút';
-  // Ốm/việc gia đình hoặc PH xin nghỉ báo trước không ảnh hưởng KPI; báo trễ vẫn có phút trễ để báo cáo xử lý.
+  // Nghỉ phép báo trước hoặc phụ huynh xin nghỉ lớp báo trước không ảnh hưởng KPI; báo trễ vẫn có phút trễ để báo cáo xử lý.
 
   // Thứ tự cột: Mã, Tên, Ngày, Ca, Loại, Giờ in, Giờ out, Trễ, Ghi chú, Ảnh, Khoảng cách
   sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel, 'VẮNG', '', '', treVang, ghiChu, '', '']);

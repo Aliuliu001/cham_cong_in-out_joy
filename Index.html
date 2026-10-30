@@ -55,22 +55,30 @@
   <select id="ca"><option value="">-- Chưa có lịch / chọn sau --</option></select>
 
   <div id="lydoWrap">
-    <label>Lý do vắng</label>
-    <select id="lydo">
-      <option>Phụ huynh xin nghỉ</option>
-      <option>Ốm / việc gia đình</option>
-      <option>Lý do khác</option>
+    <label>Lý do vắng <b>(bắt buộc)</b></label>
+    <select id="lydo" onchange="doiLyDoVang()">
+      <option value="">-- Chọn lý do --</option>
+      <option>Phụ huynh xin nghỉ lớp</option>
+      <option>Nghỉ phép (Đã báo trước)</option>
+      <option>Khác</option>
     </select>
+    <input id="vangOther" type="text" placeholder="Ghi lý do vắng" style="display:none;margin-top:8px" oninput="checkReady()">
     <div class="hint">Báo vắng bấm ở nhà được, không cần đến trung tâm. Báo sau giờ ca sẽ được ghi là báo trễ.</div>
   </div>
 
   <div id="exceptionWrap">
-    <label>Lý do ca đột xuất</label>
+    <label>Thao tác Exception <b>(bắt buộc)</b></label>
+    <select id="exceptionAction" onchange="doiThaoTacException()">
+      <option value="">-- Chọn VÀO hoặc RA --</option>
+      <option value="IN">VÀO ca Exception</option>
+      <option value="OUT">RA ca Exception</option>
+    </select>
+    <label style="margin-top:10px">Lý do ca Exception</label>
     <select id="exceptionReason" onchange="doiLyDoException()">
       <option>Dạy thay</option><option>Họp đột xuất</option><option>Sự kiện trung tâm</option><option>Khác</option>
     </select>
-    <input id="exceptionOther" type="text" placeholder="Ghi lý do ca đột xuất" style="display:none;margin-top:8px">
-    <div class="hint">Dùng khi đến làm việc đột xuất chưa có ca trong lịch. Ca này sẽ chờ quản lý duyệt.</div>
+    <input id="exceptionOther" type="text" placeholder="Ghi lý do ca Exception" style="display:none;margin-top:8px" oninput="checkReady()">
+    <div class="hint">Dùng khi đến làm việc đột xuất chưa có ca trong lịch. Ca này chờ quản lý duyệt.</div>
   </div>
 
   <div id="camWrap">
@@ -103,14 +111,17 @@ function chon(t) {
   document.getElementById('tOut').className = t === 'OUT' ? 'on-out' : '';
   document.getElementById('tVang').className = t === 'VANG' ? 'on-vang' : '';
   document.getElementById('tEx').className = t === 'EXCEPTION' ? 'on-ex' : '';
-  document.getElementById('btn').textContent = t === 'OUT' ? 'XÁC NHẬN CHECK OUT' : t === 'VANG' ? 'XÁC NHẬN BÁO VẮNG' : t === 'EXCEPTION' ? '🟣 CHECK IN CA ĐỘT XUẤT' : 'XÁC NHẬN CHECK IN';
+  document.getElementById('btn').textContent = t === 'OUT' ? 'XÁC NHẬN CHECK OUT' : t === 'VANG' ? 'XÁC NHẬN BÁO VẮNG' : t === 'EXCEPTION' ? '🟣 XÁC NHẬN EXCEPTION' : 'XÁC NHẬN CHECK IN';
   document.getElementById('lydoWrap').style.display = t === 'VANG' ? '' : 'none';
   document.getElementById('exceptionWrap').style.display = t === 'EXCEPTION' ? '' : 'none';
   document.getElementById('camWrap').style.display = t === 'VANG' ? 'none' : '';
   checkReady();
 }
-function doiLyDoException() { document.getElementById('exceptionOther').style.display = document.getElementById('exceptionReason').value === 'Khác' ? '' : 'none'; }
+function doiLyDoVang() { document.getElementById('vangOther').style.display = document.getElementById('lydo').value === 'Khác' ? '' : 'none'; checkReady(); }
+function lyDoVang() { var x=document.getElementById('lydo').value; return x === 'Khác' ? document.getElementById('vangOther').value.trim() : x; }
+function doiLyDoException() { document.getElementById('exceptionOther').style.display = document.getElementById('exceptionReason').value === 'Khác' ? '' : 'none'; checkReady(); }
 function lyDoException() { var x=document.getElementById('exceptionReason').value; return x === 'Khác' ? document.getElementById('exceptionOther').value.trim() : x; }
+function doiThaoTacException() { checkReady(); }
 
 window.onload = function () {
   google.script.run.withSuccessHandler(function (r) {
@@ -160,8 +171,10 @@ window.onload = function () {
       if (n && n.warning40) setTimeout(function(){ alert('Bạn hãy liên hệ Ms. Vân Anh. Lịch của bạn cần được kiểm tra lại.'); }, 250);
     }).getCheckinNotice(ma);
     google.script.run.withSuccessHandler(function(x){
-      var b=document.getElementById('tEx'); b.textContent=x&&x.open?'🟣 CHECK OUT CA ĐỘT XUẤT':'🟣 CHECK IN CA ĐỘT XUẤT';
-      if(loai==='EXCEPTION') document.getElementById('btn').textContent=b.textContent;
+      var select=document.getElementById('exceptionAction');
+      select.value='';
+      select.options[1].disabled=!!(x&&x.open);
+      select.options[2].disabled=!(x&&x.open);
     }).getExceptionStatus(ma);
     checkReady();
   };
@@ -232,12 +245,13 @@ function setCa(lich) {
 function checkReady() {
   // VẮNG bấm ở nhà: chỉ cần mã + ca + giờ mở trang, KHÔNG cần GPS/ảnh.
   if (loai === 'VANG') {
-    document.getElementById('btn').disabled = !(openTs && document.getElementById('ma').value && caLabel);
-    document.getElementById('checklist').textContent = !document.getElementById('ma').value ? 'Bạn chọn mã nhân viên giúp mình.' : !caLabel ? 'Bạn chọn ca cần báo vắng giúp mình.' : '';
+    var reasonVang = lyDoVang();
+    document.getElementById('btn').disabled = !(openTs && document.getElementById('ma').value && caLabel && reasonVang);
+    document.getElementById('checklist').textContent = !document.getElementById('ma').value ? 'Bạn chọn mã nhân viên giúp mình.' : !caLabel ? 'Bạn chọn ca cần báo vắng giúp mình.' : !reasonVang ? 'Bạn chọn hoặc ghi lý do vắng giúp mình.' : '';
     return;
   }
-  if (loai === 'EXCEPTION' && document.getElementById('exceptionReason').value === 'Khác' && !lyDoException()) {
-    document.getElementById('btn').disabled = true; document.getElementById('checklist').textContent = 'Bạn ghi lý do ca đột xuất giúp mình.'; return;
+  if (loai === 'EXCEPTION' && (!document.getElementById('exceptionAction').value || !lyDoException())) {
+    document.getElementById('btn').disabled = true; document.getElementById('checklist').textContent = !document.getElementById('exceptionAction').value ? 'Bạn chọn VÀO hoặc RA ca Exception giúp mình.' : 'Bạn ghi lý do ca Exception giúp mình.'; return;
   }
   var thieu = [];
   if (!loai) thieu.push('chọn VÀO/RA');
@@ -261,7 +275,7 @@ function guiException() {
   var reason=lyDoException();
   if (!reason) { document.getElementById('msg').className='err'; document.getElementById('msg').textContent='Bạn ghi lý do ca đột xuất giúp mình.'; return; }
   var m=document.getElementById('msg'), btn=document.getElementById('btn');m.className='';m.textContent='Đang gửi ca đột xuất...';btn.disabled=true;
-  google.script.run.withSuccessHandler(function(r){if(r.ok){m.className='ok';m.innerHTML='✅ '+r.msg;btn.style.display='none';}else{m.className='err';m.textContent=r.msg;btn.disabled=false;}}).withFailureHandler(function(e){m.className='err';m.textContent='Gửi lỗi: '+(e&&e.message||'mạng yếu');btn.disabled=false;}).submitException({ma:document.getElementById('ma').value,ten:document.getElementById('ten').value,lat:lat,lng:lng,photo:photoB64,reason:reason,submitTs:Date.now(),device:deviceLabel});
+  google.script.run.withSuccessHandler(function(r){if(r.ok){m.className='ok';m.innerHTML='✅ '+r.msg;btn.style.display='none';}else{m.className='err';m.textContent=r.msg;btn.disabled=false;}}).withFailureHandler(function(e){m.className='err';m.textContent='Gửi lỗi: '+(e&&e.message||'mạng yếu');btn.disabled=false;}).submitException({ma:document.getElementById('ma').value,ten:document.getElementById('ten').value,lat:lat,lng:lng,photo:photoB64,reason:reason,action:document.getElementById('exceptionAction').value,submitTs:Date.now(),device:deviceLabel});
 }
 
 function guiCheckin() {
@@ -351,9 +365,10 @@ function guiCheckinGui() {
 function guiBaoVang() {
   var m = document.getElementById('msg');
   var btn = document.getElementById('btn');
-  if (!caLabel) {
+  var reason = lyDoVang();
+  if (!caLabel || !reason) {
     m.className = 'err';
-    m.textContent = 'Bạn chọn ca cần báo vắng giúp mình.';
+    m.textContent = !caLabel ? 'Bạn chọn ca cần báo vắng giúp mình.' : 'Bạn chọn hoặc ghi lý do vắng giúp mình.';
     return;
   }
   m.className = ''; m.textContent = 'Đang gửi báo vắng... (đừng tắt trang)';
@@ -372,7 +387,7 @@ function guiBaoVang() {
     ma: document.getElementById('ma').value,
     ten: document.getElementById('ten').value,
     openTs: openTs, submitTs: new Date().getTime(), caBd: caBd, caLabel: caLabel,
-    lyDo: document.getElementById('lydo').value
+    lyDo: reason
   }).withFailureHandler(function (e) {
     m.className = 'err';
     m.textContent = 'Gửi lỗi: ' + (e && e.message ? e.message : 'mạng yếu, bạn bấm lại giúp mình.');
