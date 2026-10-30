@@ -2,14 +2,14 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 const source = fs.readFileSync('Code.gs', 'utf8');
-function create(rows, props = {}) {
+function create(rows, props = {}, telegramResponse = {code: 200, body: '{"ok":true}'}) {
   const sent = [], state = {};
   const s = {
     Date, Math, Number, String, Object, Array, RegExp, JSON, Error,
     SpreadsheetApp: {getActiveSpreadsheet: () => ({getSheetByName: n => n === 'LICHLAM' ? {getLastRow: () => rows.length, getDataRange: () => ({getDisplayValues: () => rows})} : null})},
     PropertiesService: {getScriptProperties: () => ({getProperty: n => props[n] || state[n] || '', setProperty: (n, v) => {state[n] = v;}})},
     Utilities: {formatDate: (d, tz, fmt) => {assert.equal(tz, 'Asia/Ho_Chi_Minh'); const p = n => String(n).padStart(2,'0'); const v = { 'dd/MM/yyyy': `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`, 'HH:mm': `${p(d.getHours())}:${p(d.getMinutes())}` }; return v[fmt];}},
-    UrlFetchApp: {fetch: (url, opts) => {sent.push({url, opts}); return {getResponseCode: () => 200, getContentText: () => '{"ok":true}'};}},
+    UrlFetchApp: {fetch: (url, opts) => {sent.push({url, opts}); return {getResponseCode: () => telegramResponse.code, getContentText: () => telegramResponse.body};}},
     LockService: {getScriptLock: () => ({tryLock: () => true, releaseLock: () => {}})},
     Logger: {log: () => {}}
   };
@@ -52,6 +52,18 @@ assert.equal(manual.sent.length, 1);
 assert.equal(manual.sent[0].opts.payload.chat_id, '-1003955550981');
 assert.equal(manual.sent[0].opts.payload.message_thread_id, '50');
 assert.equal(Object.keys(manual.state).filter(k => k.startsWith('LICH_LAM_SENT_')).length, 0);
+
+// Telegram's 400 description must be shown so the administrator can fix the exact setting.
+const badTopic = create(rows, props, {code: 400, body: '{"ok":false,"description":"Bad Request: message thread not found"}'});
+result = badTopic.s.testGuiLichLamNow();
+assert.equal(result.ok, false);
+assert.match(result.msg, /message thread not found/);
+
+// Before sending, the administrator can identify which bot the saved schedule token belongs to.
+const botIdentity = create(rows, props, {code: 200, body: '{"ok":true,"result":{"username":"joy_victini_bot"}}'});
+result = botIdentity.s.kiemTraBotLichLam();
+assert.deepEqual(JSON.parse(JSON.stringify(result)), {ok:true, username:'joy_victini_bot'});
+assert.match(botIdentity.sent[0].url, /\/getMe$/);
 
 // Check-in destination must be configured separately and missing destination must be safe.
 const checkin = create(rows, props);

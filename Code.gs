@@ -127,7 +127,11 @@ function guiLichLam_(now, markSent) {
     var payload = {chat_id:chat, message_thread_id:thread, text:formatTomorrowWorkSchedule(current)};
     var resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {method:'post', payload:payload, muteHttpExceptions:true});
     var body = JSON.parse(resp.getContentText());
-    if (resp.getResponseCode() !== 200 || !body.ok) { Logger.log('Không gửi được lịch: ' + resp.getResponseCode()); return {ok:false, msg:'Telegram chưa nhận lịch; kiểm tra bot và địa chỉ topic.'}; }
+    if (resp.getResponseCode() !== 200 || !body.ok) {
+      var detail = body.description || ('HTTP ' + resp.getResponseCode());
+      Logger.log('Không gửi được lịch: ' + detail);
+      return {ok:false, msg:'Telegram chưa nhận lịch: ' + detail};
+    }
     if (markSent) props.setProperty(key, 'sent');
     return {ok:true, msg:markSent ? 'Đã gửi lịch ngày ' + Utilities.formatDate(next, TZ, 'dd/MM/yyyy') : 'Đã gửi tin kiểm tra lịch.'};
   } catch(e) { Logger.log('Lỗi gửi lịch: ' + e.message); return {ok:false, msg:e.message}; }
@@ -143,6 +147,19 @@ function sendTomorrowWorkSchedule(now) {
 // Dùng để thử gửi NGAY BÂY GIỜ. Không đánh dấu lịch đã gửi, không ảnh hưởng trigger 21h.
 function testGuiLichLamNow() {
   return guiLichLam_(new Date(), false);
+}
+
+// Xác nhận token lịch đang thuộc bot nào, không in token ra Nhật ký.
+function kiemTraBotLichLam() {
+  var token = PropertiesService.getScriptProperties().getProperty('LICH_LAM_BOT_TOKEN') || '';
+  if (!token) return {ok:false, msg:'Chưa nhập LICH_LAM_BOT_TOKEN.'};
+  try {
+    var resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/getMe', {muteHttpExceptions:true});
+    var body = JSON.parse(resp.getContentText());
+    if (resp.getResponseCode() !== 200 || !body.ok || !body.result) return {ok:false, msg:(body && body.description) || ('HTTP ' + resp.getResponseCode())};
+    Logger.log('Bot lịch đang dùng: @' + body.result.username);
+    return {ok:true, username:body.result.username};
+  } catch (e) { return {ok:false, msg:e.message}; }
 }
 
 // Chạy thủ công một lần sau khi gửi /id@joy_victini_bot trong nhóm.
