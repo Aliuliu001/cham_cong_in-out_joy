@@ -33,11 +33,23 @@
   .err { color: #c00; margin-top: 8px; font-weight: bold; }
   .ok { color: #1a7a33; margin-top: 8px; font-weight: bold; }
   .hint { font-size: 13px; color: #555; margin-top: 6px; }
+  .title-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 16px; }
+  .title-row h1 { margin: 0; }
+  .info-btn { width: 30px; height: 30px; padding: 0; border: 1.5px solid #5C4A3A; border-radius: 50%; background: #F6F3EE; color: #5C4A3A; font-size: 18px; font-weight: 800; }
+  .guide-backdrop { display: none; position: fixed; z-index: 20; inset: 0; background: rgba(51,39,31,.48); padding: 22px 14px; overflow-y: auto; }
+  .guide-card { max-width: 420px; margin: 12px auto; padding: 20px; border-radius: 16px; background: #fff; box-shadow: 0 12px 34px rgba(0,0,0,.24); }
+  .guide-card h2 { margin: 0 0 12px; color: #5C4A3A; font-size: 20px; }
+  .guide-card h3 { margin: 16px 0 5px; color: #5C4A3A; font-size: 16px; }
+  .guide-card p { margin: 0; line-height: 1.45; font-size: 15px; }
+  .guide-close { width: 100%; margin-top: 18px; padding: 12px; border: 0; border-radius: 10px; background: #5C4A3A; color: #fff; font-size: 16px; font-weight: 700; }
 </style>
 </head>
 <body>
 <div class="box">
-  <h1>📍 CHECK IN</h1>
+  <div class="title-row">
+    <h1>📍 CHECK IN</h1>
+    <button type="button" class="info-btn" onclick="moHuongDan()" aria-label="Hướng dẫn sử dụng">i</button>
+  </div>
 
   <div class="typetabs">
     <button id="tIn" type="button" onclick="chon('IN')">🟢 VÀO</button>
@@ -76,7 +88,7 @@
     </select>
     <label style="margin-top:10px">Lý do ca Exception</label>
     <select id="exceptionReason" onchange="doiLyDoException()">
-      <option>Dạy thay</option><option>Họp đột xuất</option><option>Sự kiện trung tâm</option><option>Khác</option>
+      <option>Dạy bù</option><option>Dạy thay</option><option>Hỗ trợ vệ sinh và sắp xếp lớp học</option><option>Sự kiện của Trung tâm</option><option>Khác</option>
     </select>
     <input id="exceptionOther" type="text" placeholder="Ghi lý do ca Exception" style="display:none;margin-top:8px" oninput="checkReady()">
     <div class="hint">Dùng khi đến làm việc đột xuất chưa có ca trong lịch. Ca này chờ quản lý duyệt.</div>
@@ -100,7 +112,21 @@
   <div class="hint" id="checklist" style="margin-top:8px"></div>
 </div>
 
+<div id="guide" class="guide-backdrop" onclick="if(event.target===this)dongHuongDan()">
+  <div class="guide-card" role="dialog" aria-modal="true" aria-label="Hướng dẫn sử dụng">
+    <h2>ℹ️ Hướng dẫn chấm công</h2>
+    <h3>🟢 VÀO</h3><p>Chọn mã và ca, chụp ảnh, cho phép vị trí rồi bấm xác nhận khi bắt đầu ca.</p>
+    <h3>🟠 RA</h3><p>Chọn mã và đúng ca đang làm, chụp ảnh, cho phép vị trí rồi bấm xác nhận khi kết thúc ca.</p>
+    <h3>🔴 VẮNG</h3><p>Chọn mã, ca và lý do vắng. Mục này báo được ở nhà, không cần ảnh hoặc vị trí. Nếu chọn Khác, ghi rõ lý do.</p>
+    <h3>🟣 CA EXCEPTION</h3><p>Dùng khi có việc đột xuất chưa nằm trong lịch. Chọn rõ VÀO hoặc RA, chọn lý do, chụp ảnh và bật vị trí. VÀO xong phải chọn RA để kết thúc ca.</p>
+    <h3>📍 Ảnh và vị trí</h3><p>VÀO, RA và Exception cần cả ảnh lẫn vị trí. Nếu máy hỏi quyền, chọn Cho phép. Nếu đã bấm Từ chối, mở link bằng Safari rồi bật lại Vị trí/Camera trong Cài đặt.</p>
+    <button type="button" class="guide-close" onclick="dongHuongDan()">ĐÃ HIỂU</button>
+  </div>
+</div>
+
 <script>
+function moHuongDan() { document.getElementById('guide').style.display = 'block'; }
+function dongHuongDan() { document.getElementById('guide').style.display = 'none'; }
 var openTs = 0, openText = '', lat = 0, lng = 0, acc = 0, photoB64 = '',
     loai = '', caBd = '', caLabel = '', autoOutDone = false, autoOutData = null,
     deviceId = '', deviceLabel = '';
