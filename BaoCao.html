@@ -31,6 +31,14 @@
   .miss { background: #fff3f3; border-radius: 12px; padding: 12px; margin-top: 12px; }
   .miss b { color: #c00; }
   .anh { font-size: 13px; }
+  .actions { display:flex; flex-wrap:wrap; gap:8px; }
+  .actions .go { max-width:100%; }
+  .status { margin:10px 0; white-space:pre-wrap; }
+  .file-links a { display:inline-block; margin:5px 12px 5px 0; }
+  .go:disabled { opacity:.55; cursor:wait; }
+  .preview-table { overflow:auto; max-height:360px; }
+  .preview-table table { min-width:max-content; }
+  @media (max-width:600px) { .box { padding:14px; } .actions .go { width:100%; } }
 </style>
 </head>
 <body>
@@ -56,24 +64,39 @@
     <div class="row">
       <label style="font-weight:bold; min-width:50px;">Chọn tháng:</label>
       <input id="thang" placeholder="MM/yyyy (VD: 09/2026)" style="max-width:160px">
-      <button class="go" onclick="xemThang()">Xem tất cả</button>
+      <button class="go" onclick="xemThang()">👀 Xem báo cáo tháng</button>
     </div>
     <div id="kqThang"></div>
-    <div id="btnXuat" style="display:none; margin-top:12px; text-align:center;">
-      <button class="go" onclick="xuatSheet()" style="background:#1a7a33;">📥 Xuất về Sheet BAOCAO_THANG</button>
-      <button class="go" onclick="chotThang()" style="background:#7b5b3d;">🔒 Chốt tháng này</button>
-    </div>
     <section style="margin-top:22px;padding:16px;border:1px solid #e5ddd2;border-radius:14px;background:#fffdf9">
-      <h2 style="margin:0 0 8px;color:#5C4A3A;font-size:18px">📤 Xuất chấm công để tính lương</h2>
-      <p style="margin:0 0 12px;color:#666">Dùng tháng đã chọn ở trên. Chỉ đọc CHECK IN và LICHLAM; không sửa dữ liệu chấm công hay tính tiền lương.</p>
-      <div class="row"><button class="go" onclick="xemBangLuong()">👀 Xem trước dữ liệu lương</button><button class="go" onclick="taiBangLuong('csv')">⬇️ Tải CSV cũ</button><button class="go" onclick="taiBangLuong('compact')">⬇️ Tải bảng gọn</button><button class="go" onclick="taiBangLuong('xlsx')">⬇️ Tải Excel</button></div>
+      <h2 style="margin:0 0 8px;color:#5C4A3A;font-size:18px">📤 Chấm công gửi Bảng lương</h2>
+      <p>File chỉ dùng để đối chiếu. Không tự tính tiền lương hay sửa dữ liệu chấm công.</p>
+      <div class="actions"><button id="btnPreviewLuong" class="go" onclick="xemBangLuong()">👀 Xem trước dữ liệu</button><button id="btnExcelLuong" class="go" onclick="taiBangLuong()">⬇️ Tải Excel cho Bảng lương</button></div>
+      <div id="statusPreview" class="status" role="status" aria-live="polite"></div>
       <div id="previewLuong"></div>
+      <div id="statusExcel" class="status" role="status" aria-live="polite"></div>
+      <div id="excelLinks" class="file-links"></div>
+    </section>
+    <section style="margin-top:18px;padding:16px;border:1px solid #e5ddd2;border-radius:14px">
+      <h2 style="margin:0 0 8px;color:#5C4A3A;font-size:18px">🔒 Chốt tháng</h2>
+      <p>Chỉ chốt sau khi đã kiểm tra CHECK IN và LICHLAM. Không bấm để thử trên dữ liệu thật.</p>
+      <button id="btnChotThang" class="go" onclick="chotThang()">🔒 Chốt tháng</button>
+      <div id="statusChot" class="status" role="status" aria-live="polite"></div>
     </section>
   </div>
 </div>
 
 <script>
 var tab = 'ngay';
+var lastThangRequest = 0;
+var previewBusy = false, excelBusy = false, chotBusy = false;
+function thangHopLe(statusId) {
+  var th = document.getElementById('thang').value.trim();
+  if (!/^(0[1-9]|1[0-2])\/\d{4}$/.test(th)) {
+    document.getElementById(statusId).textContent = 'Nhập tháng theo MM/yyyy, ví dụ 10/2026.';
+    return null;
+  }
+  return th;
+}
 function doiTab(t) {
   tab = t;
   document.getElementById('tabNgay').className = t === 'ngay' ? 'on' : '';
@@ -178,15 +201,18 @@ function xemNgay() {
   }).withFailureHandler(loi).getBaoCaoNgay(ngay);
 }
 function xemThang() {
-  var th = document.getElementById('thang').value.trim() || thangNay();
+  var th = thangHopLe('kqThang');
+  if (!th) return;
   var kq = document.getElementById('kqThang');
   kq.textContent = 'Đang tải...';
+  var requestThang = ++lastThangRequest;
   var loi = function (e) {
-    kq.innerHTML = '<p style="color:#c00;font-weight:bold">Không tải được báo cáo: ' +
-      ((e && e.message) || 'máy bận, bạn bấm Xem lại giúp mình.') + '</p>';
+    if (requestThang !== lastThangRequest) return;
+    kq.textContent = 'Không tải được báo cáo: ' + ((e && e.message) || 'máy bận, bạn bấm Xem lại giúp mình.');
   };
   google.script.run.withSuccessHandler(function (list) {
-    if (!list.length) { kq.innerHTML = '<p>Chưa có dữ liệu tháng này.</p>'; return; }
+    if (requestThang !== lastThangRequest) return;
+    if (!list.length) { kq.textContent = 'Chưa có dữ liệu tháng này.'; return; }
     var h = '<p><b>Bảng tổng hợp tất cả nhân viên — Tháng ' + th + '</b></p>';
     h += '<table><tr><th>Mã</th><th>Họ tên</th><th>Tổng giờ</th><th>Giờ tăng cường</th><th>Số ca</th><th>Trễ IN</th><th>Quên IN</th><th>Quên OUT</th><th>Vắng có phép</th><th>Vắng không báo</th><th>KPI</th></tr>';
     list.forEach(function (r) {
@@ -210,50 +236,84 @@ function xemThang() {
     });
     h += '</table>';
     kq.innerHTML = h;
-    document.getElementById('btnXuat').style.display = '';
   }).withFailureHandler(loi).getBaoCaoThangTatCa(th);
 }
 function escLuong(x) { return String(x == null ? '' : x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function bangLuongHtml(title, headers, rows) {
-  var h='<h3 style="color:#5C4A3A">'+escLuong(title)+'</h3><div style="overflow:auto;max-height:360px"><table><thead><tr>';
+  var h='<h3 style="color:#5C4A3A">'+escLuong(title)+'</h3><div class="preview-table"><table><thead><tr>';
   headers.forEach(function(x){h+='<th>'+escLuong(x)+'</th>';});h+='</tr></thead><tbody>';
   rows.forEach(function(row){h+='<tr>';row.forEach(function(x){h+='<td>'+escLuong(x)+'</td>';});h+='</tr>';});return h+'</tbody></table></div>';
 }
 function xemBangLuong() {
-  var box=document.getElementById('previewLuong'); box.textContent='Đang tải...';
+  if (previewBusy) return;
+  var th = thangHopLe('statusPreview'); if (!th) return;
+  var btn = document.getElementById('btnPreviewLuong'), status = document.getElementById('statusPreview');
+  var box = document.getElementById('previewLuong');
+  previewBusy = btn.disabled = true;
+  box.textContent = '';
+  status.textContent = '⏳ Đang đọc dữ liệu tháng ' + th + '…';
   google.script.run.withSuccessHandler(function(data) {
-    box.innerHTML=bangLuongHtml('⚠️ Tổng hợp giáo viên',data.summaryHeaders,data.summaryRows)+bangLuongHtml('🕒 Giờ giáo viên theo tuần',data.weekHeaders,data.weekRows)+bangLuongHtml('✅ Chi tiết ca',data.detailHeaders,data.detailRows);
-  }).withFailureHandler(function(e){box.textContent='Không tải được: '+(e&&e.message||'Lỗi không rõ');}).previewPayrollWorkbook(document.getElementById('thang').value.trim()||thangNay());
+    previewBusy = btn.disabled = false;
+    if (!data || !data.detailHeaders || !data.detailRows || !data.summaryHeaders || !data.weekHeaders) {
+      status.textContent = '❌ Không đọc được dữ liệu: Kết quả không hợp lệ. Chưa có tệp nào được tạo.'; return;
+    }
+    var n = data.detailRows.length;
+    box.innerHTML = bangLuongHtml('Tổng hợp giáo viên', data.summaryHeaders, data.summaryRows || []) +
+      bangLuongHtml('Chi tiết ca', data.detailHeaders, data.detailRows) +
+      bangLuongHtml('Giờ tuần', data.weekHeaders, data.weekRows || []);
+    var sources = n && data.detailRows[0].slice(20,22).join(' / ');
+    status.textContent = n ? '✅ Đã tải ' + n + ' ca. Bảng có 3 phần: Tổng hợp giáo viên, Chi tiết ca, Giờ tuần. Kéo ngang bảng Chi tiết ca để xem đủ 25 cột. Nguồn: ' + sources :
+      'Tháng này chưa có ca để xem. Hãy kiểm tra tháng đã chọn và lịch làm.';
+  }).withFailureHandler(function(e) {
+    previewBusy = btn.disabled = false;
+    status.textContent = '❌ Không đọc được dữ liệu: ' + ((e && e.message) || 'Lỗi không rõ') + '. Chưa có tệp nào được tạo.';
+  }).previewPayrollWorkbook(th);
 }
-function taiBangLuong(kind) {
-  var th=document.getElementById('thang').value.trim()||thangNay();
-  if(kind==='csv' || kind==='compact') google.script.run.withSuccessHandler(function(f){
-    var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([f.content],{type:'text/csv;charset=utf-8'}));a.download=f.filename;a.click();URL.revokeObjectURL(a.href);
-  }).withFailureHandler(function(e){alert('Không tải được: '+(e&&e.message||'Lỗi không rõ'));})[kind==='compact'?'exportPayrollAttendanceCompactCsv':'exportPayrollAttendanceCsv'](th);
-  else google.script.run.withSuccessHandler(function(f){var a=document.createElement('a');a.href=f.url;a.download=f.filename;a.target='_blank';a.click();}).withFailureHandler(function(e){alert('Không tạo được Excel: '+(e&&e.message||'Lỗi không rõ'));}).exportPayrollAttendanceXlsx(th);
+function taiBangLuong() {
+  if (excelBusy) return;
+  var th = thangHopLe('statusExcel'); if (!th) return;
+  var btn = document.getElementById('btnExcelLuong'), status = document.getElementById('statusExcel');
+  var links = document.getElementById('excelLinks');
+  excelBusy = btn.disabled = true;
+  links.textContent = '';
+  status.textContent = '⏳ Đang tạo Excel tháng ' + th + '. Xin đợi…';
+  google.script.run.withSuccessHandler(function(f) {
+    excelBusy = btn.disabled = false;
+    if (!f || !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+\/export\?format=xlsx$/.test(f.url)) {
+      status.textContent = '❌ Chưa tải được Excel: Máy chủ không trả link Excel hợp lệ. Không có dữ liệu gốc nào bị sửa.'; return;
+    }
+    var open = document.createElement('a'); open.href = f.url.replace('/export?format=xlsx', '/edit');
+    open.target = '_blank'; open.rel = 'noopener noreferrer'; open.textContent = '📄 Mở file Excel vừa tạo';
+    var download = document.createElement('a'); download.href = f.url;
+    download.target = '_blank'; download.rel = 'noopener noreferrer'; download.textContent = '⬇️ Tải file Excel';
+    links.appendChild(open); links.appendChild(download);
+    status.textContent = '✅ Đã tạo file Excel tháng ' + th + '. Hãy xem trước để kiểm tra số ca; tháng trống có thể chỉ có hàng tiêu đề. Nếu trình duyệt không tự tải, bấm link trên để mở rồi chọn Tệp → Tải xuống → Microsoft Excel (.xlsx).';
+    // Click may be blocked by Apps Script's sandbox; links remain available either way.
+    try { download.click(); } catch (ignored) {}
+  }).withFailureHandler(function(e) {
+    excelBusy = btn.disabled = false;
+    status.textContent = '❌ Chưa tải được Excel: ' + ((e && e.message) || 'Lỗi không rõ') + '. Không có dữ liệu gốc nào bị sửa.';
+  }).exportPayrollAttendanceXlsx(th);
 }
 function chotThang() {
-  var th=document.getElementById('thang').value.trim()||thangNay();
-  google.script.run.withSuccessHandler(function(r){
-    if(r.ok) alert(r.msg);
-    else if(r.exists && confirm(r.msg+'\n\nBấm OK để chốt lại theo dữ liệu hiện tại, Cancel để giữ bản cũ.')) google.script.run.withSuccessHandler(function(x){alert(x.msg);}).chotThangAnToan(th,true);
-    else alert(r.msg);
-  }).withFailureHandler(function(e){alert('Không chốt được: '+(e&&e.message||'Lỗi không rõ'));}).chotThangAnToan(th,false);
-}
-function xuatSheet() {
-  var th = document.getElementById('thang').value.trim() || thangNay();
-  var btn = document.getElementById('btnXuat');
-  btn.innerHTML = '<button class="go" disabled style="background:#888;">⏳ Đang xuất...</button>';
-  google.script.run.withSuccessHandler(function (r) {
-    if (r.ok) {
-      btn.innerHTML = '<button class="go" style="background:#1a7a33;">✅ ' + r.msg + '</button>';
-    } else {
-      btn.innerHTML = '<button class="go" onclick="xuatSheet()" style="background:#c00;">❌ Lỗi, bấm thử lại</button>';
-    }
-  }).withFailureHandler(function (e) {
-    btn.innerHTML = '<button class="go" onclick="xuatSheet()" style="background:#c00;">❌ Lỗi: ' + 
-      (e && e.message || 'không rõ') + '</button>';
-  }).xuatBaoCaoSheet(th);
+  if (chotBusy) return;
+  var th = thangHopLe('statusChot'); if (!th) return;
+  if (!confirm('Chốt tháng ' + th + '? Hãy kiểm tra CHECK IN và LICHLAM trước khi chốt.')) return;
+  var btn = document.getElementById('btnChotThang'), status = document.getElementById('statusChot');
+  chotBusy = btn.disabled = true;
+  status.textContent = '⏳ Đang chốt tháng ' + th + '…';
+  function finish(msg) { chotBusy = btn.disabled = false; status.textContent = msg; }
+  function fail(e) { finish('❌ Không chốt được: ' + ((e && e.message) || 'Lỗi không rõ')); }
+  google.script.run.withSuccessHandler(function(r) {
+    if (r && r.ok) return finish('✅ ' + r.msg);
+    if (r && r.exists) {
+      if (!confirm('Tháng ' + th + ' đã có bản chốt. Giữ bản cũ hay chốt lại?\n\nBấm OK để chốt lại, Hủy để giữ bản cũ.')) return finish('Đã giữ bản chốt cũ.');
+      status.textContent = '⏳ Đang chốt lại tháng ' + th + '…';
+      google.script.run.withSuccessHandler(function(x) {
+        finish(x && x.ok ? '✅ ' + x.msg : '❌ Không chốt được: ' + ((x && x.msg) || 'Lỗi không rõ'));
+      }).withFailureHandler(fail).chotThangAnToan(th, true);
+    } else finish('❌ Không chốt được: ' + ((r && r.msg) || 'Lỗi không rõ'));
+  }).withFailureHandler(fail).chotThangAnToan(th, false);
 }
 </script>
 </body>

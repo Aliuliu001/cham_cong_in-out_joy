@@ -8,6 +8,13 @@
 - [x] Báo cáo ngày/tháng; phát hiện Vắng không báo.
 - [x] Xuất CSV/XLSX chấm công một chiều; CSV UTF-8 BOM; ưu tiên `CHECK IN - Tháng MM-yyyy` nếu có.
 
+## Liên kết một chiều với Bảng lương (04/11/2026)
+
+- [x] Giao diện Báo cáo tháng chỉ còn một nút tải Excel v4 và một nút xem trước; CSV/bảng gọn giữ ở mã tương thích, không hiện nút gây nhầm.
+- [x] Hiện trạng thái đang xử lý, kết quả/lỗi và link tải dự phòng; nút Chốt tháng tách riêng, không tự chạy khi xuất.
+- [x] Kiểm thử giao diện giả lập và toàn bộ bảy bộ Node test; không đổi `Code.gs` hay dữ liệu chấm công.
+- [ ] Cập nhật đúng bản triển khai Apps Script của trang Báo cáo tháng đang dùng, rồi tải file Excel thật và kiểm tra 3 sheet/25 cột với Bảng lương trước khi tính lương.
+
 ## Rà soát an toàn v4 (chạy Node, chờ kiểm thử Apps Script thật)
 
 - [x] Hai ca lịch cùng tên khác giờ và hai Exception cũ cùng ngày không bị gộp trong file xuất.
