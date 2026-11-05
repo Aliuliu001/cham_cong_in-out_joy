@@ -409,6 +409,14 @@ function submitCheckin(p) {
   var todayStr = fmtD(gioCham);
 
   // CHẶN SPAM: cùng 1 người + 1 ngày + 1 ca chỉ được 1 lần (IN hoặc VẮNG)
+  // Đồng thời không để mở một ca lịch khi ca Exception hôm nay vẫn chưa RA.
+  if (p.type === 'IN') {
+    var rows = sh.getDataRange().getDisplayValues();
+    var exceptionOpen = findOpenException(rows, p.ma, todayStr);
+    if (exceptionOpen) {
+      return { ok:false, msg:'Bạn đang có ca Exception chưa RA (' + String(exceptionOpen[3] || 'Ca Exception') + '). Hãy RA ca Exception trước khi VÀO ca lịch.' };
+    }
+  }
   // Nới rộng điều kiện trong đoạn cũ — không thêm vòng lặp mới.
   if (p.type === 'IN' && !p.autoOutDone && !p.confirmed) {
     var rows = sh.getDataRange().getDisplayValues();
@@ -531,12 +539,19 @@ function getFolder() {
 }
 
 /* ---------- Exception: ca đột xuất có ảnh/GPS ---------- */
+function findOpenException(rows, ma, ngay) {
+  for (var i=rows.length-1; i>=1; i--) {
+    if (String(rows[i][0]).trim() !== String(ma).trim() || cellDay(rows[i][2]) !== ngay) continue;
+    if (rows[i][4] === 'EXCEPTION_IN') return rows[i];
+    if (rows[i][4] === 'EXCEPTION_OUT') return null;
+  }
+  return null;
+}
 function getExceptionStatus(ma) {
   var sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN');
   if(!sh || sh.getLastRow()<2) return {open:false};
-  var rows=sh.getDataRange().getDisplayValues();
-  for(var i=rows.length-1;i>=1;i--) if(String(rows[i][0]).trim()===String(ma).trim() && (rows[i][4]==='EXCEPTION_IN'||rows[i][4]==='EXCEPTION_OUT')) return {open:rows[i][4]==='EXCEPTION_IN', ca:String(rows[i][3]||'')};
-  return {open:false};
+  var rows=sh.getDataRange().getDisplayValues(), open=findOpenException(rows, ma, fmtD(new Date()));
+  return {open:!!open, ca:open ? String(open[3]||'') : ''};
 }
 function submitException(p) {
   if (!p.ma || !p.ten || !p.reason) return { ok:false, msg:'Bạn chọn mã, tên và lý do giúp mình.' };
@@ -544,8 +559,8 @@ function submitException(p) {
   if (!p.lat || !p.lng || !p.photo) return { ok:false, msg:'Ca Exception cần GPS và ảnh.' };
   var now = new Date(p.submitTs || new Date().getTime()), dist=Math.round(haversine(p.lat,p.lng,CENTER_LAT,CENTER_LNG));
   if (dist > RADIUS_M) return {ok:false,msg:'Bạn đang ngoài khu vực check-in: '+dist+' m.'};
-  var sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN'), rows=sh.getDataRange().getDisplayValues(), open=null;
-  for(var i=rows.length-1;i>=1;i--) if(String(rows[i][0]).trim()===String(p.ma).trim() && (rows[i][4]==='EXCEPTION_IN'||rows[i][4]==='EXCEPTION_OUT')) { if(rows[i][4]==='EXCEPTION_IN') open=rows[i]; break; }
+  var sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CHECK IN'), rows=sh.getDataRange().getDisplayValues();
+  var open=findOpenException(rows, p.ma, fmtD(now));
   if (p.action === 'IN' && open) return {ok:false,msg:'Bạn đang có một ca Exception chưa RA. Hãy chọn RA ca Exception để kết thúc ca đó.'};
   if (p.action === 'OUT' && !open) return {ok:false,msg:'Chưa có ca Exception đang mở để RA.'};
   var type=p.action === 'IN' ? 'EXCEPTION_IN' : 'EXCEPTION_OUT', ca='Ca Exception — '+p.reason;
