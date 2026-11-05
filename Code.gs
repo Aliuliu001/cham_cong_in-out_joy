@@ -408,15 +408,13 @@ function submitCheckin(p) {
   var sh = ss.getSheetByName('CHECK IN');
   var todayStr = fmtD(gioCham);
 
-  // CHẶN SPAM: cùng 1 người + 1 ngày + 1 ca chỉ được 1 lần (IN hoặc VẮNG)
-  // Đồng thời không để mở một ca lịch khi ca Exception hôm nay vẫn chưa RA.
+  // Khi VÀO ca lịch mới mà còn Exception mở trong cùng ngày, tự RA Exception
+  // đúng tại giờ VÀO mới để tránh chồng giờ và bớt một thao tác cho giáo viên.
+  var exceptionOpen = null;
   if (p.type === 'IN') {
-    var rows = sh.getDataRange().getDisplayValues();
-    var exceptionOpen = findOpenException(rows, p.ma, todayStr);
-    if (exceptionOpen) {
-      return { ok:false, msg:'Bạn đang có ca Exception chưa RA (' + String(exceptionOpen[3] || 'Ca Exception') + '). Hãy RA ca Exception trước khi VÀO ca lịch.' };
-    }
+    exceptionOpen = findOpenException(sh.getDataRange().getDisplayValues(), p.ma, todayStr);
   }
+  // CHẶN SPAM: cùng 1 người + 1 ngày + 1 ca chỉ được 1 lần (IN hoặc VẮNG)
   // Nới rộng điều kiện trong đoạn cũ — không thêm vòng lặp mới.
   if (p.type === 'IN' && !p.autoOutDone && !p.confirmed) {
     var rows = sh.getDataRange().getDisplayValues();
@@ -471,6 +469,7 @@ function submitCheckin(p) {
   }
   
   if (p.autoOutDone) note = 'VÀO ca mới sau khi hệ thống tự OUT ca trước';
+  if (exceptionOpen) note = [note, 'VÀO ca lịch mới: hệ thống tự RA Exception cùng giờ'].filter(function(x){ return x; }).join(' | ');
 
   var lateMin = 0;
   if (p.type === 'IN' && p.caBd) {
@@ -492,7 +491,15 @@ function submitCheckin(p) {
   var checkInTime = p.type === 'IN' ? cellHM(gioCham) : '';
   var checkOutTime = p.type === 'OUT' ? cellHM(gioCham) : '';
   var noteFull = [note, canhBaoChungMay.ghiChu].filter(function (x) { return x; }).join(' | ');
-  
+
+  if (exceptionOpen) {
+    var exceptionCa = String(exceptionOpen[3] || 'Ca Exception');
+    var exceptionNote = String(exceptionOpen[8] || 'Exception');
+    sh.appendRow([p.ma, p.ten, ngayStr, exceptionCa, 'EXCEPTION_OUT', '', cellHM(gioCham), 0,
+      exceptionNote + ' | Hệ thống tự RA khi VÀO ca lịch mới', file.getUrl(), distM, p.device || '']);
+    guiAnhTelegram(p.photo, '🟣 ' + cellHM(gioCham) + ' — ' + p.ten + ' (' + p.ma + ') RA CA EXCEPTION — hệ thống tự kết thúc khi VÀO ca lịch mới.');
+  }
+
   sh.appendRow([p.ma, p.ten, ngayStr, p.caLabel || '', p.type, checkInTime, checkOutTime, lateMin, noteFull, file.getUrl(), distM, p.device || '']);
 
   // Báo tin vào topic Check IN/OUT (kèm ảnh). Gửi lỗi cũng không chặn chấm công.
@@ -504,6 +511,7 @@ function submitCheckin(p) {
   guiAnhTelegram(p.type === 'IN' ? p.photo : '', tin);
 
   return { ok: true, time: fmtDT(gioCham), distance: distM, lateMin: lateMin, type: p.type,
+    autoExceptionOut: !!exceptionOpen, exceptionInTime: exceptionOpen ? String(exceptionOpen[5] || '') : '',
     canhBao: canhBaoChungMay.popup, chungMay: canhBaoChungMay.chungMay };
 }
 

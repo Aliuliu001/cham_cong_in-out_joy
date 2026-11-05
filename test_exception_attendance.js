@@ -16,25 +16,43 @@ function sandbox(rows) {
     Logger: { log() {} },
     SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: () => sheet }) },
     Utilities: {
-      formatDate: (d, tz, f) => f === 'dd/MM/yyyy' ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '',
+      formatDate: (d, tz, f) => {
+        const p = n => String(n).padStart(2, '0');
+        if (f === 'dd/MM/yyyy') return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`;
+        if (f === 'HH:mm') return `${p(d.getHours())}:${p(d.getMinutes())}`;
+        if (f === 'dd/MM/yyyy HH:mm:ss') return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+        if (f === 'yyyyMMdd_HHmmss') return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+        return '';
+      },
       getUuid: () => 'uuid', base64Decode: () => [], newBlob: () => ({})
     },
     DriveApp: { getFoldersByName: () => ({ hasNext: () => true, next: () => ({ createFile: () => ({ getUrl: () => 'file-url' }) }) }) }
   };
-  vm.createContext(s); vm.runInContext(code, s); s.guiAnhTelegram = () => 'ok'; return s;
+  vm.createContext(s); vm.runInContext(code, s); s.guiAnhTelegram = () => 'ok'; return { s, rows };
 }
 
-let s = sandbox([header, ['DA','Đức Anh',day,'Ca Exception — Dạy bù','EXCEPTION_IN','16:30','','0','Exception | Dạy bù | ID:EX-DA']]);
+let env = sandbox([header, ['DA','Đức Anh',day,'Ca Exception — Dạy bù','EXCEPTION_IN','16:30','','0','Exception | Dạy bù | ID:EX-DA']]);
+let s = env.s;
 assert.equal(s.getExceptionStatus('DA').open, true, 'same-day Exception IN must show as open');
 let r = s.submitCheckin({ma:'DA',ten:'Đức Anh',lat:11.937044,lng:108.444760,photo:'x',type:'IN',caLabel:'Ca dạy 17:45-19:15',submitTs:new Date(2026,10,5,17,45).getTime()});
-assert.equal(r.ok, false, 'must block regular IN while Exception is open');
-assert.match(r.msg, /Exception chưa RA/);
+assert.equal(r.ok, true, 'regular IN must succeed while auto-closing a same-day Exception');
+assert.equal(r.autoExceptionOut, true);
+assert.equal(r.exceptionInTime, '16:30');
+assert.equal(env.rows.length, 4, 'must write Exception OUT then regular IN');
+assert.equal(env.rows[2][4], 'EXCEPTION_OUT');
+assert.equal(env.rows[2][6], '17:45');
+assert.match(env.rows[2][8], /Hệ thống tự RA/);
+assert.equal(env.rows[3][4], 'IN');
+assert.equal(env.rows[3][5], '17:45');
+assert.match(env.rows[3][8], /hệ thống tự RA Exception/i);
 
-s = sandbox([header, ['DA','Đức Anh',day,'Ca Exception — Dạy bù','EXCEPTION_IN','16:30','','0','Exception | Dạy bù | ID:EX-DA'], ['DA','Đức Anh',day,'Ca Exception — Dạy bù','EXCEPTION_OUT','','18:00','0','Exception | Dạy bù | ID:EX-DA']]);
+env = sandbox([header, ['DA','Đức Anh',day,'Ca Exception — Dạy bù','EXCEPTION_IN','16:30','','0','Exception | Dạy bù | ID:EX-DA'], ['DA','Đức Anh',day,'Ca Exception — Dạy bù','EXCEPTION_OUT','','18:00','0','Exception | Dạy bù | ID:EX-DA']]);
+s = env.s;
 assert.equal(s.getExceptionStatus('DA').open, false, 'same-day Exception OUT must close the Exception');
 r = s.submitCheckin({ma:'DA',ten:'Đức Anh',lat:11.937044,lng:108.444760,photo:'x',type:'IN',caLabel:'Ca dạy 17:45-19:15',submitTs:new Date(2026,10,5,18,1).getTime()});
-assert.notEqual(r.msg && r.msg.indexOf('Exception chưa RA') >= 0, true, 'closed Exception must not trigger the blocking message');
+assert.equal(r.autoExceptionOut, false, 'closed Exception must not be closed again');
 
-s = sandbox([header, ['DA','Đức Anh','04/11/2026','Ca Exception — Dạy bù','EXCEPTION_IN','16:30','','0','Exception | Dạy bù | ID:EX-YESTERDAY']]);
+env = sandbox([header, ['DA','Đức Anh','04/11/2026','Ca Exception — Dạy bù','EXCEPTION_IN','16:30','','0','Exception | Dạy bù | ID:EX-YESTERDAY']]);
+s = env.s;
 assert.equal(s.getExceptionStatus('DA').open, false, 'yesterday Exception must not affect today');
-console.log('PASS exception attendance: same-day open state, regular-IN block, closed and prior-day Exceptions');
+console.log('PASS exception attendance: same-day open state, automatic Exception OUT, closed and prior-day Exceptions');
