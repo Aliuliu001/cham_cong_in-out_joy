@@ -2,7 +2,12 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 const code = fs.readFileSync('Code.gs', 'utf8');
-const day = '05/11/2026';
+const now = new Date();
+const pad = n => String(n).padStart(2, '0');
+const day = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`;
+const stamp = (hour, minute) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute).getTime();
+const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+const yesterdayDay = `${pad(yesterday.getDate())}/${pad(yesterday.getMonth() + 1)}/${yesterday.getFullYear()}`;
 const header = ['Mã NV','Họ tên','Ngày','Ca','Loại IN/OUT','Giờ check in','Giờ check out','Trễ (phút)','Ghi chú','Ảnh','Khoảng cách','Thiết bị'];
 
 function sandbox(rows) {
@@ -34,7 +39,7 @@ function sandbox(rows) {
 let env = sandbox([header, ['DA','Đức Anh',day,'Ca Exception — Dạy bù','EXCEPTION_IN','16:30','','0','Exception | Dạy bù | ID:EX-DA']]);
 let s = env.s;
 assert.equal(s.getExceptionStatus('DA').open, true, 'same-day Exception IN must show as open');
-let r = s.submitCheckin({ma:'DA',ten:'Đức Anh',lat:11.937044,lng:108.444760,photo:'x',type:'IN',caLabel:'Ca dạy 17:45-19:15',submitTs:new Date(2026,10,5,17,45).getTime()});
+let r = s.submitCheckin({ma:'DA',ten:'Đức Anh',lat:11.937044,lng:108.444760,photo:'x',type:'IN',caLabel:'Ca dạy 17:45-19:15',submitTs:stamp(17,45)});
 assert.equal(r.ok, true, 'regular IN must succeed while auto-closing a same-day Exception');
 assert.equal(r.autoExceptionOut, true);
 assert.equal(r.exceptionInTime, '16:30');
@@ -49,10 +54,10 @@ assert.match(env.rows[3][8], /hệ thống tự RA Exception/i);
 env = sandbox([header, ['DA','Đức Anh',day,'Ca Exception — Dạy bù','EXCEPTION_IN','16:30','','0','Exception | Dạy bù | ID:EX-DA'], ['DA','Đức Anh',day,'Ca Exception — Dạy bù','EXCEPTION_OUT','','18:00','0','Exception | Dạy bù | ID:EX-DA']]);
 s = env.s;
 assert.equal(s.getExceptionStatus('DA').open, false, 'same-day Exception OUT must close the Exception');
-r = s.submitCheckin({ma:'DA',ten:'Đức Anh',lat:11.937044,lng:108.444760,photo:'x',type:'IN',caLabel:'Ca dạy 17:45-19:15',submitTs:new Date(2026,10,5,18,1).getTime()});
+r = s.submitCheckin({ma:'DA',ten:'Đức Anh',lat:11.937044,lng:108.444760,photo:'x',type:'IN',caLabel:'Ca dạy 17:45-19:15',submitTs:stamp(18,1)});
 assert.equal(r.autoExceptionOut, false, 'closed Exception must not be closed again');
 
-env = sandbox([header, ['DA','Đức Anh','04/11/2026','Ca Exception — Dạy bù','EXCEPTION_IN','16:30','','0','Exception | Dạy bù | ID:EX-YESTERDAY']]);
+env = sandbox([header, ['DA','Đức Anh',yesterdayDay,'Ca Exception — Dạy bù','EXCEPTION_IN','16:30','','0','Exception | Dạy bù | ID:EX-YESTERDAY']]);
 s = env.s;
 assert.equal(s.getExceptionStatus('DA').open, false, 'yesterday Exception must not affect today');
 console.log('PASS exception attendance: same-day open state, automatic Exception OUT, closed and prior-day Exceptions');

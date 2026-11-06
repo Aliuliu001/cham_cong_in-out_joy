@@ -70,9 +70,7 @@
     <section style="margin-top:22px;padding:16px;border:1px solid #e5ddd2;border-radius:14px;background:#fffdf9">
       <h2 style="margin:0 0 8px;color:#5C4A3A;font-size:18px">📤 Chấm công gửi Bảng lương</h2>
       <p>File chỉ dùng để đối chiếu. Không tự tính tiền lương hay sửa dữ liệu chấm công.</p>
-      <div class="actions"><button id="btnPreviewLuong" class="go" onclick="xemBangLuong()">👀 Xem trước dữ liệu</button><button id="btnExcelLuong" class="go" onclick="taiBangLuong()">⬇️ Tải Excel cho Bảng lương</button></div>
-      <div id="statusPreview" class="status" role="status" aria-live="polite"></div>
-      <div id="previewLuong"></div>
+      <div class="actions"><button id="btnExcelLuong" class="go" onclick="taiBangLuong()">📥 Xuất file Excel cho Bảng lương</button></div>
       <div id="statusExcel" class="status" role="status" aria-live="polite"></div>
       <div id="excelLinks" class="file-links"></div>
     </section>
@@ -88,7 +86,7 @@
 <script>
 var tab = 'ngay';
 var lastThangRequest = 0;
-var previewBusy = false, excelBusy = false, chotBusy = false;
+var excelBusy = false, chotBusy = false;
 function thangHopLe(statusId) {
   var th = document.getElementById('thang').value.trim();
   if (!/^(0[1-9]|1[0-2])\/\d{4}$/.test(th)) {
@@ -238,61 +236,36 @@ function xemThang() {
     kq.innerHTML = h;
   }).withFailureHandler(loi).getBaoCaoThangTatCa(th);
 }
-function escLuong(x) { return String(x == null ? '' : x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function bangLuongHtml(title, headers, rows) {
-  var h='<h3 style="color:#5C4A3A">'+escLuong(title)+'</h3><div class="preview-table"><table><thead><tr>';
-  headers.forEach(function(x){h+='<th>'+escLuong(x)+'</th>';});h+='</tr></thead><tbody>';
-  rows.forEach(function(row){h+='<tr>';row.forEach(function(x){h+='<td>'+escLuong(x)+'</td>';});h+='</tr>';});return h+'</tbody></table></div>';
-}
-function xemBangLuong() {
-  if (previewBusy) return;
-  var th = thangHopLe('statusPreview'); if (!th) return;
-  var btn = document.getElementById('btnPreviewLuong'), status = document.getElementById('statusPreview');
-  var box = document.getElementById('previewLuong');
-  previewBusy = btn.disabled = true;
-  box.textContent = '';
-  status.textContent = '⏳ Đang đọc dữ liệu tháng ' + th + '…';
-  google.script.run.withSuccessHandler(function(data) {
-    previewBusy = btn.disabled = false;
-    if (!data || !data.detailHeaders || !data.detailRows || !data.summaryHeaders || !data.weekHeaders) {
-      status.textContent = '❌ Không đọc được dữ liệu: Kết quả không hợp lệ. Chưa có tệp nào được tạo.'; return;
-    }
-    var n = data.detailRows.length;
-    box.innerHTML = bangLuongHtml('Tổng hợp giáo viên', data.summaryHeaders, data.summaryRows || []) +
-      bangLuongHtml('Chi tiết ca', data.detailHeaders, data.detailRows) +
-      bangLuongHtml('Giờ tuần', data.weekHeaders, data.weekRows || []);
-    var sources = n && data.detailRows[0].slice(20,22).join(' / ');
-    status.textContent = n ? '✅ Đã tải ' + n + ' ca. Bảng có 3 phần: Tổng hợp giáo viên, Chi tiết ca, Giờ tuần. Kéo ngang bảng Chi tiết ca để xem đủ 25 cột. Nguồn: ' + sources :
-      'Tháng này chưa có ca để xem. Hãy kiểm tra tháng đã chọn và lịch làm.';
-  }).withFailureHandler(function(e) {
-    previewBusy = btn.disabled = false;
-    status.textContent = '❌ Không đọc được dữ liệu: ' + ((e && e.message) || 'Lỗi không rõ') + '. Chưa có tệp nào được tạo.';
-  }).previewPayrollWorkbook(th);
-}
 function taiBangLuong() {
-  if (excelBusy) return;
-  var th = thangHopLe('statusExcel'); if (!th) return;
   var btn = document.getElementById('btnExcelLuong'), status = document.getElementById('statusExcel');
   var links = document.getElementById('excelLinks');
+  var th = thangHopLe('statusExcel'); if (!th) return;
+  // Lần bấm thứ hai là thao tác thật của người dùng, tránh bị Apps Script/trình duyệt chặn tải tự động sau RPC.
+  if (btn.dataset.downloadUrl && btn.dataset.downloadMonth === th) {
+    window.open(btn.dataset.downloadUrl, '_blank', 'noopener');
+    status.textContent = '✅ Đang mở file Excel để tải xuống.';
+    return;
+  }
+  if (excelBusy) return;
   excelBusy = btn.disabled = true;
   links.textContent = '';
-  status.textContent = '⏳ Đang tạo Excel tháng ' + th + '. Xin đợi…';
+  status.textContent = '⏳ Đang tạo file Excel tháng ' + th + '. Xin đợi…';
   google.script.run.withSuccessHandler(function(f) {
     excelBusy = btn.disabled = false;
     if (!f || !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+\/export\?format=xlsx$/.test(f.url)) {
-      status.textContent = '❌ Chưa tải được Excel: Máy chủ không trả link Excel hợp lệ. Không có dữ liệu gốc nào bị sửa.'; return;
+      status.textContent = '❌ Không tạo được Excel: Máy chủ không trả file hợp lệ. Dữ liệu chấm công không bị sửa.'; return;
     }
-    var open = document.createElement('a'); open.href = f.url.replace('/export?format=xlsx', '/edit');
-    open.target = '_blank'; open.rel = 'noopener noreferrer'; open.textContent = '📄 Mở file Excel vừa tạo';
-    var download = document.createElement('a'); download.href = f.url;
-    download.target = '_blank'; download.rel = 'noopener noreferrer'; download.textContent = '⬇️ Tải file Excel';
-    links.appendChild(open); links.appendChild(download);
-    status.textContent = '✅ Đã tạo file Excel tháng ' + th + '. Hãy xem trước để kiểm tra số ca; tháng trống có thể chỉ có hàng tiêu đề. Nếu trình duyệt không tự tải, bấm link trên để mở rồi chọn Tệp → Tải xuống → Microsoft Excel (.xlsx).';
-    // Click may be blocked by Apps Script's sandbox; links remain available either way.
-    try { download.click(); } catch (ignored) {}
+    btn.dataset.downloadUrl = f.url;
+    btn.dataset.downloadMonth = th;
+    btn.textContent = '⬇️ Bấm lần nữa để tải file Excel';
+    var fallback = document.createElement('a');
+    fallback.href = f.url; fallback.target = '_blank'; fallback.rel = 'noopener noreferrer';
+    fallback.textContent = 'Nếu nút không mở được, bấm đây để tải Excel';
+    links.appendChild(fallback);
+    status.textContent = '✅ Đã tạo file Excel tháng ' + th + '. Bấm lại nút xanh để tải file về máy.';
   }).withFailureHandler(function(e) {
     excelBusy = btn.disabled = false;
-    status.textContent = '❌ Chưa tải được Excel: ' + ((e && e.message) || 'Lỗi không rõ') + '. Không có dữ liệu gốc nào bị sửa.';
+    status.textContent = '❌ Không tạo được Excel: ' + ((e && e.message) || 'Lỗi không rõ') + '. Dữ liệu chấm công không bị sửa.';
   }).exportPayrollAttendanceXlsx(th);
 }
 function chotThang() {
