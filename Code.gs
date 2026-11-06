@@ -2,6 +2,8 @@
  * CHECK-IN JOY — Code.gs (backend)
  * 1 file này + Index.html + BaoCao.html + appsscript.json
  * Setup lần đầu: chạy hàm setup() 1 lần để tự tạo đủ tabs trong Sheets.
+ * 
+ * TEST CLASP AUTO-DEPLOY: 2026-11-06 20:08 ✓
  */
 
 var CENTER_LAT = 11.937044;
