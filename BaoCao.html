@@ -48,6 +48,7 @@
   <div class="tabs">
     <button id="tabNgay" class="on" onclick="doiTab('ngay')">Hôm nay (Ngày)</button>
     <button id="tabThang" onclick="doiTab('thang')">Tổng hợp Tháng</button>
+    <button id="tabTuan" onclick="doiTab('tuan')">📅 Giờ tuần</button>
   </div>
 
   <div id="pNgay">
@@ -60,6 +61,17 @@
     <div id="kqNgay"></div>
   </div>
 
+  <div id="pTuan" style="display:none">
+    <div class="row">
+      <label style="font-weight:bold; min-width:90px;">Chọn ngày:</label>
+      <input type="date" id="tuanPicker" onchange="xemTuan()">
+      <button class="go" onclick="xemTuan(-7)">← Tuần trước</button>
+      <button class="go" onclick="xemTuan(7)">Tuần sau →</button>
+    </div>
+    <p>Giờ thực tế chỉ tính ca đủ VÀO/RA. Giờ Exception chờ duyệt được hiển thị riêng, không phải giờ đã xác nhận.</p>
+    <div id="kqTuan"></div>
+  </div>
+
   <div id="pThang" style="display:none">
     <div class="row">
       <label style="font-weight:bold; min-width:50px;">Chọn tháng:</label>
@@ -67,6 +79,12 @@
       <button class="go" onclick="xemThang()">👀 Xem báo cáo tháng</button>
     </div>
     <div id="kqThang"></div>
+    <section style="margin-top:16px;padding:16px;border:1px solid #e5ddd2;border-radius:14px">
+      <h2 style="margin:0 0 8px;color:#5C4A3A;font-size:18px">📋 Báo cáo trong Google Sheet</h2>
+      <p>Ghi lại <b>BAOCAO_THANG - MM/yyyy</b> và <b>Lỗi tháng MM/yyyy</b> trong file hiện tại; không tải file. Bản cùng tháng sẽ được ghi lại.</p>
+      <div class="actions"><button id="btnBaoCaoSheet" class="go" onclick="xuatBaoCaoThang()">📤 Xuất về Sheet BAOCAO_THANG</button></div>
+      <div id="statusBaoCaoSheet" class="status" role="status" aria-live="polite"></div>
+    </section>
     <section style="margin-top:22px;padding:16px;border:1px solid #e5ddd2;border-radius:14px;background:#fffdf9">
       <h2 style="margin:0 0 8px;color:#5C4A3A;font-size:18px">📤 Chấm công gửi Bảng lương</h2>
       <p>File chỉ dùng để đối chiếu. Không tự tính tiền lương hay sửa dữ liệu chấm công.</p>
@@ -86,7 +104,7 @@
 <script>
 var tab = 'ngay';
 var lastThangRequest = 0;
-var excelBusy = false, chotBusy = false;
+var excelBusy = false, chotBusy = false, sheetBusy = false;
 function thangHopLe(statusId) {
   var th = document.getElementById('thang').value.trim();
   if (!/^(0[1-9]|1[0-2])\/\d{4}$/.test(th)) {
@@ -99,9 +117,12 @@ function doiTab(t) {
   tab = t;
   document.getElementById('tabNgay').className = t === 'ngay' ? 'on' : '';
   document.getElementById('tabThang').className = t === 'thang' ? 'on' : '';
+  document.getElementById('tabTuan').className = t === 'tuan' ? 'on' : '';
   document.getElementById('pNgay').style.display = t === 'ngay' ? '' : 'none';
   document.getElementById('pThang').style.display = t === 'thang' ? '' : 'none';
+  document.getElementById('pTuan').style.display = t === 'tuan' ? '' : 'none';
   if (t === 'thang' && !document.getElementById('kqThang').innerHTML) xemThang();
+  if (t === 'tuan' && !document.getElementById('kqTuan').innerHTML) xemTuan();
 }
 function homNay() {
   var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -131,6 +152,7 @@ window.onload = function () {
   var h = homNay();
   document.getElementById('ngay').value = h;
   document.getElementById('ngayPicker').value = toISO(h);
+  document.getElementById('tuanPicker').value = toISO(h);
   document.getElementById('thang').value = thangNay();
   xemNgay();
 };
@@ -237,37 +259,14 @@ function xemThang() {
   }).withFailureHandler(loi).getBaoCaoThangTatCa(th);
 }
 function taiBangLuong() {
-  var btn = document.getElementById('btnExcelLuong'), status = document.getElementById('statusExcel');
-  var links = document.getElementById('excelLinks');
-  var th = thangHopLe('statusExcel'); if (!th) return;
-  // Lần bấm thứ hai là thao tác thật của người dùng, tránh bị Apps Script/trình duyệt chặn tải tự động sau RPC.
-  if (btn.dataset.downloadUrl && btn.dataset.downloadMonth === th) {
-    window.open(btn.dataset.downloadUrl, '_blank', 'noopener');
-    status.textContent = '✅ Đang mở file Excel để tải xuống.';
-    return;
-  }
-  if (excelBusy) return;
-  excelBusy = btn.disabled = true;
-  links.textContent = '';
-  status.textContent = '⏳ Đang tạo file Excel tháng ' + th + '. Xin đợi…';
-  google.script.run.withSuccessHandler(function(f) {
-    excelBusy = btn.disabled = false;
-    if (!f || !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+\/export\?format=xlsx$/.test(f.url)) {
-      status.textContent = '❌ Không tạo được Excel: Máy chủ không trả file hợp lệ. Dữ liệu chấm công không bị sửa.'; return;
-    }
-    btn.dataset.downloadUrl = f.url;
-    btn.dataset.downloadMonth = th;
-    btn.textContent = '⬇️ Bấm lần nữa để tải file Excel';
-    var fallback = document.createElement('a');
-    fallback.href = f.url; fallback.target = '_blank'; fallback.rel = 'noopener noreferrer';
-    fallback.textContent = 'Nếu nút không mở được, bấm đây để tải Excel';
-    links.appendChild(fallback);
-    status.textContent = '✅ Đã tạo file Excel tháng ' + th + '. Bấm lại nút xanh để tải file về máy.';
-  }).withFailureHandler(function(e) {
-    excelBusy = btn.disabled = false;
-    status.textContent = '❌ Không tạo được Excel: ' + ((e && e.message) || 'Lỗi không rõ') + '. Dữ liệu chấm công không bị sửa.';
-  }).exportPayrollAttendanceXlsx(th);
+  var btn=document.getElementById('btnExcelLuong'), status=document.getElementById('statusExcel'), links=document.getElementById('excelLinks'), th=thangHopLe('statusExcel'); if(!th)return;
+  var popup=window.open('', '_blank', 'noopener');
+  if(btn.dataset.downloadUrl&&btn.dataset.downloadMonth===th){ if(popup) popup.location.href=btn.dataset.downloadUrl; status.textContent=popup?'✅ Đang mở file Excel để tải xuống.':'⚠️ Trình duyệt chặn cửa sổ; bấm liên kết tải bên dưới.'; return; }
+  if(excelBusy){if(popup)popup.close();return;} excelBusy=btn.disabled=true;links.textContent='';status.textContent='⏳ Đang tạo file Excel tháng '+th+'. Xin đợi…';
+  google.script.run.withSuccessHandler(function(f){excelBusy=btn.disabled=false;if(!f||!/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+\/export\?format=xlsx$/.test(f.url)){if(popup)popup.close();status.textContent='❌ Không tạo được Excel: Máy chủ không trả file hợp lệ. Dữ liệu chấm công không bị sửa.';return;}btn.dataset.downloadUrl=f.url;btn.dataset.downloadMonth=th;var fallback=document.createElement('a');fallback.href=f.url;fallback.target='_blank';fallback.rel='noopener noreferrer';fallback.textContent='Nếu cửa sổ bị chặn, bấm đây để tải Excel';links.appendChild(fallback);if(popup){popup.location.href=f.url;status.textContent='✅ Đã mở file Excel để tải xuống.';}else status.textContent='⚠️ Trình duyệt chặn cửa sổ tải; bấm liên kết bên dưới.';}).withFailureHandler(function(e){excelBusy=btn.disabled=false;if(popup)popup.close();status.textContent='❌ Không tạo được Excel: '+((e&&e.message)||'Lỗi không rõ')+'. Dữ liệu chấm công không bị sửa.';}).exportPayrollAttendanceXlsx(th);
 }
+function xuatBaoCaoThang(){var btn=document.getElementById('btnBaoCaoSheet'),status=document.getElementById('statusBaoCaoSheet'),th=thangHopLe('statusBaoCaoSheet');if(!th||sheetBusy)return;if(!confirm('Xuất lại BAOCAO_THANG và Lỗi tháng '+th+'? Bản cùng tháng sẽ được ghi lại.'))return;sheetBusy=btn.disabled=true;status.textContent='⏳ Đang ghi báo cáo vào Google Sheet…';google.script.run.withSuccessHandler(function(r){sheetBusy=btn.disabled=false;status.textContent=r&&r.ok?'✅ '+r.msg:'❌ Không ghi được: '+((r&&r.msg)||'Lỗi không rõ');}).withFailureHandler(function(e){sheetBusy=btn.disabled=false;status.textContent='❌ Không ghi được: '+((e&&e.message)||'Lỗi không rõ');}).xuatBaoCaoSheet(th);}
+function xemTuan(delta){var picker=document.getElementById('tuanPicker'),d=picker.value?new Date(picker.value+'T00:00:00'):new Date();if(delta){d.setDate(d.getDate()+delta);picker.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}var ngay=toVN(picker.value),kq=document.getElementById('kqTuan');kq.textContent='Đang tải…';google.script.run.withSuccessHandler(function(rows){if(!rows.length){kq.textContent='Chưa có giờ đã xác nhận trong tuần này.';return;}var h='<table><tr><th>Nhân viên</th><th>Tuần</th><th>Giờ thực tế đã xác nhận</th><th>Exception chờ duyệt</th><th>Tổng theo dõi</th><th>Cảnh báo</th></tr>';rows.forEach(function(r){var red=/Trên 46/.test(r.canhBao);h+='<tr><td><b>'+r.ma+'</b> '+r.ten+'</td><td>'+r.tu+' – '+r.den+'</td><td>'+r.gioThucTe+'h</td><td>'+r.gioExceptionChoDuyet+'h</td><td>'+r.tongGioTheoDoi+'h</td><td class="'+(red?'tre':r.thieuDuLieu?'tre':'')+'">'+r.canhBao+'</td></tr>';});kq.innerHTML=h+'</table>';}).withFailureHandler(function(e){kq.textContent='Không tải được giờ tuần: '+((e&&e.message)||'Lỗi không rõ');}).getBaoCaoGioTuan(ngay);}
 function chotThang() {
   if (chotBusy) return;
   var th = thangHopLe('statusChot'); if (!th) return;

@@ -1014,7 +1014,8 @@ function exportPayrollAttendanceXlsx(monthStr) {
   return { url: url, filename: 'Cham_cong_tinh_luong_' + monthStr.replace('/', '-') + '.xlsx' };
 }
 
-var PAYROLL_DETAIL_HEADERS = ['Mã dòng','Mã NV','Họ tên','Ngày','Loại ca','Tên ca','Giờ VÀO','Giờ RA','Số giờ thực tế','Giờ đề xuất tính công','Kết quả công','Lý do','Trễ (phút)','Ảnh hưởng KPI','Lý do KPI','Phép','Lý do phép','Quên chấm năm nay','Trạng thái Exception','Ghi chú','Nguồn dữ liệu','Lịch đối chiếu','Phiên bản file','Giờ dùng kiểm soát 46h','Nhắc nhở'];
+var PAYROLL_DETAIL_HEADERS = ['Mã dòng','Mã NV','Họ tên','Ngày','Loại ca','Tên ca','Giờ VÀO','Giờ RA','Số giờ thực tế','Giờ đề xuất tính công','Kết quả công','Lý do','Trễ (phút)','Ảnh hưởng KPI','Lý do KPI','Gợi ý phép (Bảng lương xem xét)','Lý do/Ngày gợi ý phép','Quên chấm năm nay','Trạng thái Exception','Ghi chú','Nguồn dữ liệu','Lịch đối chiếu','Phiên bản file','Giờ dùng kiểm soát 46h','Nhắc nhở'];
+// Cột 16 chỉ là gợi ý để Bảng lương duyệt; repo chấm công không khấu trừ phép.
 var PAYROLL_V4_VERSION = 'attendance-export-v4';
 function payrollRowId(r) {
   if (r.isException && r.uid) return r.uid;
@@ -1064,8 +1065,10 @@ function getPayrollWorkbookData(monthStr) {
   }
   if (src.sheet && src.sheet.getLastRow() >= 2) {
     var cv=src.sheet.getDataRange().getDisplayValues(), raw=src.sheet.getDataRange().getValues(), legacyOpen={};
-    for(var j=1;j<cv.length;j++){var ma2=String(cv[j][0]||'').trim();if(!ma2||thangCuaO(raw[j][2])!==monthStr)continue;var ngay2=ngayCuaO(raw[j][2]), type=String(cv[j][4]||''), ex=isExceptionType(type), note=String(cv[j][8]||''), uidMatch=note.match(/(?:^|\|)\s*ID:(EX-[A-Za-z0-9-]+)/), uid=ex&&uidMatch?uidMatch[1]:'', legacyKey=ma2+'|'+ngay2+'|'+String(cv[j][3]||''), legacyUid=ex&&!uid?(type==='EXCEPTION_IN'?'EX-LEGACY-'+ma2+'-'+ngay2.split('/').reverse().join('')+'-'+j:(legacyOpen[legacyKey]||'EX-UNPAIRED-'+ma2+'-'+j)):'', r=(ex?null:scheduledShiftForEvent(ma2,ngay2,String(cv[j][3]||'')))||add(ma2,String(cv[j][1]||''),ngay2,String(cv[j][3]||''),ex,uid||legacyUid), ti=cellHM(cv[j][5]),to=cellHM(cv[j][6]);
-      if(ex&&!uid){if(type==='EXCEPTION_IN')legacyOpen[legacyKey]=legacyUid;else delete legacyOpen[legacyKey];}
+    for(var j=1;j<cv.length;j++){var ma2=String(cv[j][0]||'').trim();if(!ma2||thangCuaO(raw[j][2])!==monthStr)continue;var ngay2=ngayCuaO(raw[j][2]), type=String(cv[j][4]||''), ex=isExceptionType(type), note=String(cv[j][8]||''), uidMatch=note.match(/(?:^|\|)\s*ID:(EX-[A-Za-z0-9-]+)/), uid=ex&&uidMatch?uidMatch[1]:'', legacyKey=ma2+'|'+ngay2+'|'+String(cv[j][3]||''), legacyUid=ex&&!uid?(type==='EXCEPTION_IN'?'EX-LEGACY-'+ma2+'-'+ngay2.split('/').reverse().join('')+'-'+j:(legacyOpen[legacyKey]||'EX-UNPAIRED-'+ma2+'-'+j)):'', resolvedUid=uid||legacyUid, r=(ex?null:scheduledShiftForEvent(ma2,ngay2,String(cv[j][3]||'')))||add(ma2,String(cv[j][1]||''),ngay2,String(cv[j][3]||''),ex,resolvedUid), ti=cellHM(cv[j][5]),to=cellHM(cv[j][6]);
+      // OUT cũ thường không giữ ID: dùng ca VÀO đang mở cùng nhân viên-ngày-ca,
+      // kể cả VÀO có ID mới, để hai dấu không bị tách thành hai Exception.
+      if(ex){if(type==='EXCEPTION_IN')legacyOpen[legacyKey]=resolvedUid;else delete legacyOpen[legacyKey];}
       if(type==='IN'||type==='EXCEPTION_IN'){r.hasIn=true;r.vao=ti||r.vao;r.late=Math.max(r.late,Number(cv[j][7]||0));} else if(type==='OUT'||type==='EXCEPTION_OUT'){r.hasOut=true;r.ra=to||r.ra;} else if(type==='VẮNG'){r.absent='Vắng';r.absentReason=note.split(' (')[0]||'Vắng';r.reportedLate=Number(cv[j][7]||0);} if(note)r.notes.push(note);
     }
   }
@@ -1082,7 +1085,7 @@ function getPayrollWorkbookData(monthStr) {
   var roles={};getNhanVienList().forEach(function(n){roles[n.ma]=n.role;});
   var controlIntervals={};
   details.forEach(function(x){var r=x.r,e=x.ev;if(!(r.hasIn&&r.hasOut) || !(r.isException || e.result==='Tính theo giờ thực tế'))return;var k=r.ma+'|'+getWeekStart(r.ngay),a=parseVN(r.ngay+' '+r.vao),b=parseVN(r.ngay+' '+r.ra);if(b<a)b+=86400000;if(!controlIntervals[k])controlIntervals[k]=[];controlIntervals[k].push([a,b,r.isException]);});
-  var byPerson={}, byWeek={}; details.forEach(function(x){var r=x.r,e=x.ev,pk=r.ma+'|'+r.ten;if(!byPerson[pk])byPerson[pk]={ma:r.ma,ten:r.ten,role:roles[r.ma]||'',actual:0,exempt:0,no:0,exceptions:0,quota:x.quota,kpi:[],leave:[],todo:[]};var p=byPerson[pk];p.quota=Math.max(p.quota,x.quota);if(e.result==='Tính theo giờ thực tế')p.actual+=Number(e.hours||0);else if(e.result==='Không tính công')p.no++;else p.exceptions++;if(e.kpi==='Có')p.kpi.push(r.ngay+' — '+r.ca+' — '+e.kpiReason);if(e.leave==='Trừ phép')p.leave.push(r.ngay+' — '+r.ca+' — '+e.reason);if(e.result==='Chờ duyệt Exception'||e.result==='Không tính công')p.todo.push(r.ngay+' — '+r.ca+' — '+e.reason);
+  var byPerson={}, byWeek={}; details.forEach(function(x){var r=x.r,e=x.ev,pk=r.ma+'|'+r.ten,leaveCase=!r.isException&&((r.hasIn!==r.hasOut)||r.absent==='Vắng không báo'),absenceSuggestion=leaveCase?leaveSuggestionForUnreportedAbsence(r.ngay,r.bd,r.kt,r.hasIn!==r.hasOut?'Quên chấm '+(r.hasIn?'RA':'VÀO'):'Vắng không báo'):null;if(!byPerson[pk])byPerson[pk]={ma:r.ma,ten:r.ten,role:roles[r.ma]||'',actual:0,exempt:0,no:0,exceptions:0,quota:x.quota,kpi:[],leave:[],todo:[]};var p=byPerson[pk];p.quota=Math.max(p.quota,x.quota);if(e.result==='Tính theo giờ thực tế')p.actual+=Number(e.hours||0);else if(e.result==='Không tính công')p.no++;else p.exceptions++;if(e.kpi==='Có')p.kpi.push(r.ngay+' — '+r.ca+' — '+e.kpiReason);if(absenceSuggestion)p.leave.push(r.ngay+' — '+r.ca+' — '+absenceSuggestion.suggestion+' — '+absenceSuggestion.reason);else if(e.leave==='Trừ phép')p.leave.push(r.ngay+' — '+r.ca+' — Gợi ý Bảng lương xem xét — '+e.reason);if(e.result==='Chờ duyệt Exception'||e.result==='Không tính công')p.todo.push(r.ngay+' — '+r.ca+' — '+e.reason);
     var wk=r.ma+'|'+getWeekStart(r.ngay);if(!byWeek[wk])byWeek[wk]={ma:r.ma,ten:r.ten,start:getWeekStart(r.ngay),actual:0,exempt:0,exception:0};if(e.result==='Tính theo giờ thực tế')byWeek[wk].actual+=Number(e.hours||0);if(r.isException&&r.hasIn&&r.hasOut)byWeek[wk].exception+=Number(hoursBetween(r.ngay,r.vao,r.ra)||0);
   });
   Object.keys(controlIntervals).forEach(function(k){var intervals=controlIntervals[k].sort(function(a,b){return a[0]-b[0]||a[1]-b[1];}), actual=0, exception=0, cursor=0;intervals.forEach(function(t){var fresh=Math.max(0,t[1]-Math.max(t[0],cursor))/3600000;if(t[2])exception+=fresh;else actual+=fresh;cursor=Math.max(cursor,t[1]);});if(byWeek[k]){byWeek[k].actual=Math.round(actual*100)/100;byWeek[k].exception=Math.round(exception*100)/100;}});
@@ -1093,11 +1096,23 @@ function getPayrollWorkbookData(monthStr) {
     });
     var total=Math.round((w.actual+w.exception)*100)/100,state=missing?'Chưa đủ dữ liệu tuần':total>46?'Vượt '+Math.round((total-46)*100)/100+' giờ':total===46?'Đủ 46 giờ':'Còn '+Math.round((46-total)*100)/100+' giờ',warn=missing?'Chưa đủ dữ liệu tuần vắt tháng — kiểm tra tháng kề':total>46?'Vượt 46 giờ — cần quản lý kiểm tra':total>=40?'Từ 40 giờ — liên hệ Ms. Vân Anh':'';return [w.ma,w.ten,w.start,endStr,w.actual,w.exception,total,46,state,warn];});
   var summaryRows=Object.keys(byPerson).sort().map(function(k){var p=byPerson[k], ws=weekRows.filter(function(w){return w[0]===p.ma;}),high=ws.reduce(function(a,w){return Math.max(a,Number(w[6]||0));},0),state=high>46?'Vượt '+Math.round((high-46)*100)/100+' giờ':high>=40?'Từ 40 giờ — kiểm tra lịch':'Bình thường';return[p.ma,p.ten,p.role,Math.round(p.actual*100)/100,Math.round(p.exempt*100)/100,p.no,p.exceptions,p.quota+'/4',high,state,p.kpi.join('; '),p.leave.join('; '),p.todo.join('; ')];});
-  var detailRows=details.map(function(x){var r=x.r,e=x.ev, verified=r.hasIn&&r.hasOut?hoursBetween(r.ngay,r.vao,r.ra):'', control=r.isException&&verified!==''?verified:e.result==='Tính theo giờ thực tế'?verified:0, proposed=e.result==='Tính theo giờ thực tế'?verified:0, ph=r.absentReason.indexOf('Phụ huynh xin nghỉ')===0, reminder=ph&&Number(r.reportedLate||0)>0?'PH xin nghỉ báo muộn '+r.reportedLate+' phút':'', note=r.notes.join(' | '), status=r.isException?'Chờ duyệt Exception':'Không có';return[payrollRowId(r),r.ma,r.ten,r.ngay,r.isException?'Ca đột xuất':'Ca lịch',r.ca,r.vao,r.ra,verified,proposed,e.result,e.reason,r.late||r.reportedLate||0,e.kpi,e.kpiReason,e.leave==='Trừ phép'?'Trừ phép':'Không trừ phép',e.leave==='Trừ phép'?r.absentReason:'',x.quota+'/4',status,note,x.source,x.schedule,PAYROLL_V4_VERSION,control,reminder];});
+  var detailRows=details.map(function(x){var r=x.r,e=x.ev, verified=r.hasIn&&r.hasOut?hoursBetween(r.ngay,r.vao,r.ra):'', control=r.isException&&verified!==''?verified:e.result==='Tính theo giờ thực tế'?verified:0, proposed=e.result==='Tính theo giờ thực tế'?verified:0, ph=r.absentReason.indexOf('Phụ huynh xin nghỉ')===0, reminder=ph&&Number(r.reportedLate||0)>0?'PH xin nghỉ báo muộn '+r.reportedLate+' phút':'', note=r.notes.join(' | '), status=r.isException?'Chờ duyệt Exception':'Không có', leaveCase=!r.isException&&((r.hasIn!==r.hasOut)||r.absent==='Vắng không báo'), suggestion=leaveCase?leaveSuggestionForUnreportedAbsence(r.ngay,r.bd,r.kt,r.hasIn!==r.hasOut?'Quên chấm '+(r.hasIn?'RA':'VÀO'):'Vắng không báo'):null, leaveText=suggestion?suggestion.suggestion:(e.leave==='Trừ phép'?'Gợi ý Bảng lương xem xét':'Không gợi ý trừ phép'), leaveReason=suggestion?(r.ngay+' — '+r.ca+' — '+suggestion.reason):(e.leave==='Trừ phép'?r.absentReason:'');return[payrollRowId(r),r.ma,r.ten,r.ngay,r.isException?'Ca đột xuất':'Ca lịch',r.ca,r.vao,r.ra,verified,proposed,e.result,e.reason,r.late||r.reportedLate||0,e.kpi,e.kpiReason,leaveText,leaveReason,x.quota+'/4',status,note,x.source,x.schedule,PAYROLL_V4_VERSION,control,reminder];});
   return {detailRows:detailRows,summaryRows:summaryRows,weekRows:weekRows};
 }
 
 function previewPayrollWorkbook(monthStr) { var d=getPayrollWorkbookData(monthStr); return {summaryHeaders:PAYROLL_SUMMARY_HEADERS,summaryRows:d.summaryRows,detailHeaders:PAYROLL_DETAIL_HEADERS,detailRows:d.detailRows,weekHeaders:PAYROLL_WEEK_HEADERS,weekRows:d.weekRows}; }
+
+// Báo cáo chỉ đọc cho tab Giờ tuần. Giờ thực tế và Exception chờ duyệt tách riêng;
+// không gọi Telegram và không quyết định lương/phép.
+function getBaoCaoGioTuan(ngayStr) {
+  var start=getWeekStart(ngayStr), monthStr=start.slice(3), data=getPayrollWorkbookData(monthStr), endDate=parseVNDate(start);
+  endDate.setDate(endDate.getDate()+6);
+  var end=('0'+endDate.getDate()).slice(-2)+'/'+('0'+(endDate.getMonth()+1)).slice(-2)+'/'+endDate.getFullYear();
+  return data.weekRows.filter(function(row){return row[2]===start;}).map(function(row){
+    var missing=String(row[9]||'').indexOf('Chưa đủ dữ liệu')>=0;
+    return {ma:row[0],ten:row[1],tu:start,den:end,gioThucTe:Number(row[4]||0),gioExceptionChoDuyet:Number(row[5]||0),tongGioTheoDoi:Number(row[6]||0),canhBao:missing?'Chưa đủ dữ liệu — kiểm tra tháng kề':weeklyHoursWarning(Number(row[6]||0)),thieuDuLieu:missing};
+  });
+}
 function exportPayrollAttendanceCompactCsv(monthStr) { var d=getPayrollWorkbookData(monthStr), rows=[PAYROLL_DETAIL_HEADERS].concat(d.detailRows), csv=rows.map(function(row){return row.map(function(x){return '"'+String(x==null?'':x).replace(/"/g,'""')+'"';}).join(',');}).join('\r\n');return {filename:'Cham_cong_tinh_luong_gon_'+monthStr.replace('/','-')+'.csv',content:'\uFEFF'+csv}; }
 
 // Chốt bản copy để xem/xuất lại tháng cũ. Không xóa dữ liệu CHECK IN hiện hành.
@@ -1144,6 +1159,24 @@ function hoursBetween(ngay, vao, ra) {
 function scheduleHours(ngay, bd, kt) {
   if (!bd || !kt) return 0;
   return hoursBetween(ngay, bd, kt) || 0;
+}
+
+// Chỉ gợi ý cho ca lịch đã qua giờ, không có VẮNG và không có dấu nào.
+// Không ghi/trừ phép: Bảng lương phải duyệt gợi ý này.
+function leaveSuggestionForUnreportedAbsence(ngay, bd, kt, incident) {
+  var dow = parseVNDate(ngay).getDay(), label=incident || 'Vắng không báo';
+  if (dow !== 0 && dow !== 6) return {suggestion:'Gợi ý 1 phép', reason:label+' ca lịch T2–T6 — Bảng lương xem xét'};
+  if (!bd || !kt) return {suggestion:'Cần Bảng lương duyệt', reason:label+' T7/CN — chưa xác định buổi theo giờ lịch'};
+  var hour = Number(String(bd).split(':')[0]);
+  if (isNaN(hour)) return {suggestion:'Cần Bảng lương duyệt', reason:label+' T7/CN — chưa xác định buổi theo giờ lịch'};
+  return {suggestion:'Gợi ý 1 phép', reason:label+' buổi '+(hour < 12 ? 'sáng' : 'chiều')+' T7/CN — Bảng lương xem xét'};
+}
+
+function weeklyHoursWarning(total) {
+  total = Number(total || 0);
+  if (total > 46) return 'Trên 46 giờ — quản lý kiểm tra';
+  if (total >= 40) return 'Từ 40 giờ — kiểm tra lịch';
+  return 'Bình thường (<40 giờ)';
 }
 
 // annualMissedBefore = số lần quên ca lịch TRƯỚC ca đang xét (0-based).
