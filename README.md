@@ -39,11 +39,21 @@ Web chấm công QR cho điện thoại, dùng Google Apps Script + Google Sheet
 - Báo sau giờ ca: không công và ghi số phút báo trễ để xử lý KPI.
 - Không báo: Nghỉ không báo, không công, trừ KPI.
 
+### Ca Online
+
+- Trong `LICHLAM`, thêm cột cuối **Hình thức**. Chỉ dùng: `Tại trung tâm` hoặc `Online`.
+- Ca Online vẫn bắt buộc ảnh, VÀO/RA, tính giờ thực tế và đi vào báo cáo/giờ tuần; chỉ không kiểm GPS.
+- Ca tại trung tâm (hoặc ô Hình thức để trống) giữ GPS + ảnh + bán kính 100m.
+- Trên màn hình chấm công, giáo viên có thể đổi sang `💻 Dạy Online`; phải xác nhận. CHECK IN ghi rõ Online theo lịch hay giáo viên tự xác nhận để quản lý đối chiếu.
+- **Việc anh làm thủ công:** thêm cột `Hình thức` vào `LICHLAM`; nhập `Online` cho ca online. Không chạy `setup()` chỉ để thêm cột vì có thể ảnh hưởng dữ liệu đang dùng.
+
 ### Exception
 
 - Nút `🟣 CHECK IN CA ĐỘT XUẤT` / `🟣 CHECK OUT CA ĐỘT XUẤT` dành cho công việc không có lịch sẵn.
 - Bắt buộc có lý do, GPS và ảnh.
-- Exception đủ hai đầu chỉ ở trạng thái Chờ duyệt, chưa tự cộng giờ/lương.
+- Exception đủ hai đầu ở trạng thái `Chờ duyệt`.
+- Trong **Báo cáo tháng → 🟣 Duyệt ca Exception**, anh duyệt từng ca: `Duyệt tính giờ` hoặc `Không duyệt` (bắt buộc ghi lý do). Không có duyệt hàng loạt.
+- Ca đã duyệt được cộng vào giờ tháng/tuần và file xuất Bảng lương; ca chờ duyệt hiện riêng, ca không duyệt không tính giờ. Quyết định lưu trong tab tự tạo `DUYET_EXCEPTION`; không sửa trực tiếp tab này.
 - Trong một tháng: Exception thiếu IN/OUT lần 1–3 chờ duyệt; từ lần thiếu thứ 4 không tính giờ. Exception không dùng quota miễn trừ của ca lịch.
 
 ## Chốt tháng và xuất Bảng lương

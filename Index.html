@@ -105,9 +105,12 @@
   </div>
 
   <div class="status">🕐 Thời gian:<br><b id="time">Đang xác định...</b></div>
-  <div class="status">📍 Vị trí:<br><b id="gps">Đang xác định...</b><br><button id="gpsBtn" type="button" onclick="layGPS()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ccc;background:#fff;font-size:14px;">📍 Lấy lại vị trí</button></div>
-  <div class="hint">Lần đầu iPhone hỏi "Cho phép vị trí / camera" — bấm <b>Cho phép</b>.
-    Nếu bấm nhầm Từ chối: vào Cài đặt → Safari → Vị trí/Camera → bật lại.</div>
+  <div class="status">
+    <label style="display:inline-block;margin:0 0 5px"><input type="checkbox" id="onlineTick" onchange="doiHinhThucDay(this.checked ? 'Online' : 'Tại trung tâm')"> 💻 Dạy Online</label>
+    <div id="gpsWrap" style="margin-top:5px">📍 Vị trí:<br><b id="gps">Chọn mã và ca để xác định có cần GPS.</b><br><button id="gpsBtn" type="button" onclick="layGPS()" style="margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid #ccc;background:#fff;font-size:14px;">📍 Lấy lại vị trí</button></div>
+    <div id="onlineHint" class="hint" style="display:none">💻 Ca Online không cần GPS. Bạn vẫn phải chụp ảnh và bấm VÀO/RA.</div>
+  </div>
+  <div class="hint">Ca tại trung tâm cần GPS và ảnh. Ca Online chỉ bỏ GPS, vẫn cần ảnh.</div>
 
   <button id="btn" disabled>XÁC NHẬN CHECK IN</button>
   <div id="msg"></div>
@@ -266,14 +269,23 @@ function layGPS() {
   }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
 }
 
-function setCa(lich) {
-  var c = document.getElementById('ca'), l = lich[Number(c.value) || 0];
-  if (l) { caBd=l.bd; caLabel=l.ca+' '+l.bd+'-'+l.kt; hinhThucCa=l.hinhThuc||'Tại trung tâm'; }
-  else { caBd=''; caLabel=''; hinhThucCa='Tại trung tâm'; }
-  var online=hinhThucCa==='Online', gps=document.getElementById('gps'), gpsBtn=document.getElementById('gpsBtn');
-  if(online){gps.textContent='💻 Ca Online — không cần GPS';gpsBtn.style.display='none';}
-  else {gpsBtn.style.display=''; if(!lat||!lng) layGPS();}
+function capNhatHinhThucDay() {
+  var online=hinhThucCa==='Online', gpsWrap=document.getElementById('gpsWrap'), hint=document.getElementById('onlineHint');
+  document.getElementById('onlineTick').checked=online;
+  gpsWrap.style.display=online?'none':''; hint.style.display=online?'':'none';
+  if(online) document.getElementById('gps').textContent='💻 Ca Online — không cần GPS';
+  else if(!lat||!lng) layGPS();
   checkReady();
+}
+function doiHinhThucDay(value) {
+  if(value==='Online' && hinhThucCa!=='Online' && !confirm('Bạn xác nhận đang dạy Online? Hệ thống sẽ không kiểm GPS.')) { capNhatHinhThucDay(); return; }
+  hinhThucCa=value==='Online'?'Online':'Tại trung tâm'; capNhatHinhThucDay();
+}
+function setCa(lich) {
+  var c=document.getElementById('ca'), l=lich[Number(c.value)||0];
+  if(l){caBd=l.bd;caLabel=l.ca+' '+l.bd+'-'+l.kt;hinhThucCa=l.hinhThuc||'Tại trung tâm';}
+  else{caBd='';caLabel='';hinhThucCa='Tại trung tâm';}
+  capNhatHinhThucDay();
 }
 
 function checkReady() {
@@ -388,7 +400,7 @@ function guiCheckinGui() {
     ten: document.getElementById('ten').value,
     lat: lat, lng: lng, photo: photoB64, type: loai,
     openTs: openTs, openText: openText, submitText: submitText, submitTs: submitTs,
-    caBd: caBd, caLabel: caLabel, autoOutDone: autoOutDone, autoOutData: autoOutData,
+    caBd: caBd, caLabel: caLabel, hinhThuc: hinhThucCa, autoOutDone: autoOutDone, autoOutData: autoOutData,
     device: deviceLabel
   }).withFailureHandler(function (e) {
     clearTimeout(timeoutId);

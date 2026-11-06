@@ -79,6 +79,11 @@
       <button class="go" onclick="xemThang()">👀 Xem báo cáo tháng</button>
     </div>
     <div id="kqThang"></div>
+    <section style="margin-top:16px;padding:16px;border:1px solid #e5ddd2;border-radius:14px;background:#fffdf9">
+      <h2 style="margin:0 0 8px;color:#5C4A3A;font-size:18px">🟣 Ca Exception chờ duyệt</h2>
+      <div id="kqDuyetException" aria-live="polite">Đang kiểm tra…</div>
+      <p class="hint">Việc duyệt làm trực tiếp trong tab <b>DUYET_EXCEPTION</b> của Google Sheet.</p>
+    </section>
     <section style="margin-top:16px;padding:16px;border:1px solid #e5ddd2;border-radius:14px">
       <h2 style="margin:0 0 8px;color:#5C4A3A;font-size:18px">📋 Báo cáo trong Google Sheet</h2>
       <p>Ghi lại <b>BAOCAO_THANG - MM/yyyy</b> và <b>Lỗi tháng MM/yyyy</b> trong file hiện tại; không tải file. Bản cùng tháng sẽ được ghi lại.</p>
@@ -257,7 +262,10 @@ function xemThang() {
     h += '</table>';
     kq.innerHTML = h;
   }).withFailureHandler(loi).getBaoCaoThangTatCa(th);
+  xemDuyetException();
 }
+function escHtml(v) { return String(v == null ? '' : v).replace(/[&<>'"]/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]; }); }
+function xemDuyetException() { var kq=document.getElementById('kqDuyetException'); kq.textContent='Đang kiểm tra…'; google.script.run.withSuccessHandler(function(r){var n=Number(r&&r.count||0);kq.innerHTML=n?'<b class="tre">Có '+n+' ca đang chờ duyệt.</b><br>Mở Google Sheet → tab <b>DUYET_EXCEPTION</b> để chọn Quyết định và Người duyệt.':'<b class="okc">Không có ca Exception đang chờ duyệt.</b>';}).withFailureHandler(function(){kq.textContent='Không đọc được số ca chờ duyệt.';}).getExceptionPendingCount(); }
 function taiBangLuong() {
   var btn=document.getElementById('btnExcelLuong'), status=document.getElementById('statusExcel'), links=document.getElementById('excelLinks'), th=thangHopLe('statusExcel'); if(!th)return;
   var popup=window.open('', '_blank', 'noopener');

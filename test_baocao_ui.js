@@ -7,6 +7,9 @@ assert.match(html, /onclick="xuatBaoCaoThang\(\)"/);
 assert.match(html, /id="tabTuan"/);
 assert.match(html, /getBaoCaoGioTuan/);
 assert.match(html, /window\.open\('', '_blank'/);
+assert.match(html, /id="kqDuyetException"/);
+assert.match(html, /getExceptionPendingCount/);
+assert.doesNotMatch(html, /decideExceptionApproval/);
 const nodes = new Map();
 function element() { return { _text: '', innerHTML: '', style: {}, children: [], disabled: false, dataset: {},
   set textContent(v) { this._text = v; this.innerHTML = ''; this.children = []; },
