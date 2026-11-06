@@ -81,4 +81,22 @@ assert.equal(checkin.sent[0].opts.payload.message_thread_id, '77');
 const noCheckinDestination = create(rows, {TELEGRAM_BOT_TOKEN:'checkin-token'});
 assert.equal(noCheckinDestination.s.guiTinTelegram('Do not send'), 'THIEU DIA CHI NHAN');
 assert.equal(noCheckinDestination.sent.length, 0);
-console.log('PASS: schedule topic, manual no-marker test, check-in destination and missing config safety');
+
+// Cảnh báo giờ tuần dùng topic quản lý riêng; chỉ gửi khi mới vượt ngưỡng,
+// không làm hỏng thao tác chấm công nếu thiếu cấu hình.
+const weeklyProps = Object.assign({}, props, {WEEKLY_HOURS_CHAT_ID:'-1004452694903', WEEKLY_HOURS_THREAD_ID:'2'});
+const weekly = create(rows, weeklyProps);
+weekly.s.getBaoCaoGioTuan = () => [{ma:'001',ten:'Cô An',tu:'02/11/2026',den:'08/11/2026',gioThucTe:40.01,gioExceptionChoDuyet:2,tongGioTheoDoi:42.01,thieuDuLieu:false}];
+result = weekly.s.guiCanhBaoGioTuan('05/11/2026');
+assert.equal(result.sent, 1); assert.equal(weekly.sent.length, 1);
+assert.equal(weekly.sent[0].opts.payload.chat_id, '-1004452694903');
+assert.equal(weekly.sent[0].opts.payload.message_thread_id, '2');
+assert.match(weekly.sent[0].opts.payload.text, /Cô An/);
+assert.match(weekly.sent[0].opts.payload.text, />40 giờ/);
+result = weekly.s.guiCanhBaoGioTuan('05/11/2026');
+assert.equal(result.sent, 0, 'same employee/week/threshold is sent only once');
+const noWeeklyDestination = create(rows, props);
+noWeeklyDestination.s.getBaoCaoGioTuan = weekly.s.getBaoCaoGioTuan;
+result = noWeeklyDestination.s.guiCanhBaoGioTuan('05/11/2026');
+assert.equal(result.sent, 0); assert.equal(noWeeklyDestination.sent.length, 0);
+console.log('PASS: schedule topic, manual no-marker test, check-in destination, weekly warning and missing config safety');

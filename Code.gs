@@ -60,6 +60,41 @@ function testGuiTinCheckIn() {
   return guiTinTelegram('🤖 Test Check In/Out: ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'));
 }
 
+/* ---------- Cảnh báo giờ tuần cho topic quản lý ---------- */
+// Cấu hình riêng trong Script Properties để không đổi nơi nhận tin IN/OUT:
+// WEEKLY_HOURS_CHAT_ID=-1004452694903, WEEKLY_HOURS_THREAD_ID=2.
+// Token vẫn dùng TELEGRAM_BOT_TOKEN của @joy_chamcong_bot.
+function diaChiNhanCanhBaoGioTuan_() {
+  var props = PropertiesService.getScriptProperties();
+  return {chat:props.getProperty('WEEKLY_HOURS_CHAT_ID') || '', thread:props.getProperty('WEEKLY_HOURS_THREAD_ID') || ''};
+}
+function guiCanhBaoGioTuan(ngayStr) {
+  var props=PropertiesService.getScriptProperties(), token=props.getProperty('TELEGRAM_BOT_TOKEN') || '', dest=diaChiNhanCanhBaoGioTuan_();
+  if(!token || !dest.chat || !dest.thread) { Logger.log('Thiếu TELEGRAM_BOT_TOKEN hoặc địa chỉ topic cảnh báo giờ tuần.'); return {sent:0, skipped:true, msg:'Thiếu cấu hình cảnh báo giờ tuần.'}; }
+  var rows=getBaoCaoGioTuan(ngayStr || fmtD(new Date())), sent=0, errors=[];
+  rows.forEach(function(r) {
+    // Chỉ dùng giờ thực tế có đủ VÀO/RA để cảnh báo; Exception được nêu riêng.
+    if(r.thieuDuLieu) return;
+    var level=r.gioThucTe>46?'46':r.gioThucTe>40?'40':'';
+    if(!level) return;
+    var key='WEEKLY_HOURS_SENT_'+r.ma+'_'+r.tu.replace(/\//g,'-')+'_'+level;
+    if(props.getProperty(key)) return;
+    var text='⚠️ GIỜ TUẦN — '+r.ten+' ('+r.ma+')\n' +
+      'Tuần: '+r.tu+' – '+r.den+'\n' +
+      'Giờ thực tế đã chấm: '+r.gioThucTe+' giờ\n' +
+      (r.gioExceptionChoDuyet ? 'Exception chờ duyệt: '+r.gioExceptionChoDuyet+' giờ\n' : '') +
+      'Cảnh báo: '+(level==='46'?'>46 giờ — quản lý kiểm tra':'>40 giờ — kiểm tra lịch.');
+    try {
+      var resp=UrlFetchApp.fetch('https://api.telegram.org/bot'+token+'/sendMessage',{method:'post',payload:{chat_id:dest.chat,message_thread_id:dest.thread,text:text},muteHttpExceptions:true}), body=JSON.parse(resp.getContentText());
+      if(resp.getResponseCode()===200 && body.ok) { props.setProperty(key,'sent'); sent++; }
+      else errors.push((body && body.description) || ('HTTP '+resp.getResponseCode()));
+    } catch(e) { errors.push(e.message); }
+  });
+  return {sent:sent, skipped:false, msg:errors.length ? 'Telegram lỗi: '+errors.join('; ') : (sent ? 'Đã gửi '+sent+' cảnh báo giờ tuần.' : 'Chưa có cảnh báo giờ tuần mới.')};
+}
+// Chạy thủ công sau khi nhập Script Properties để thử một lần; không tạo dữ liệu chấm công.
+function testCanhBaoGioTuan() { return guiCanhBaoGioTuan(fmtD(new Date())); }
+
 function guiAnhTelegram(photoB64, caption) {
   try {
     var props = PropertiesService.getScriptProperties();
@@ -509,6 +544,8 @@ function submitCheckin(p) {
     (p.type === 'IN' && lateMin > 0 ? ', trễ ' + lateMin + 'p' : '') +
     (p.type === 'IN' && !lateMin ? ', đúng giờ' : '');
   guiAnhTelegram(p.type === 'IN' ? p.photo : '', tin);
+  // Chỉ kiểm sau RA: giờ đã có đủ VÀO/RA. Lỗi Telegram/báo cáo không chặn chấm công.
+  if (p.type === 'OUT') { try { guiCanhBaoGioTuan(ngayStr); } catch (weeklyWarnError) { Logger.log('Không gửi cảnh báo giờ tuần: ' + weeklyWarnError.message); } }
 
   return { ok: true, time: fmtDT(gioCham), distance: distM, lateMin: lateMin, type: p.type,
     autoExceptionOut: !!exceptionOpen, exceptionInTime: exceptionOpen ? String(exceptionOpen[5] || '') : '',
