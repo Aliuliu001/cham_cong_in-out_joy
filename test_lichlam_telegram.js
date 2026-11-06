@@ -86,8 +86,8 @@ assert.equal(noCheckinDestination.sent.length, 0);
 // không làm hỏng thao tác chấm công nếu thiếu cấu hình.
 const weeklyProps = Object.assign({}, props, {WEEKLY_HOURS_CHAT_ID:'-1004452694903', WEEKLY_HOURS_THREAD_ID:'2'});
 const weekly = create(rows, weeklyProps);
-weekly.s.getBaoCaoGioTuan = () => [{ma:'001',ten:'Cô An',tu:'02/11/2026',den:'08/11/2026',gioThucTe:40.01,gioExceptionChoDuyet:2,tongGioTheoDoi:42.01,thieuDuLieu:false}];
-result = weekly.s.guiCanhBaoGioTuan('05/11/2026');
+weekly.s.getGioTuanNhanh_ = () => [{ma:'001',ten:'Cô An',tu:'02/11/2026',den:'08/11/2026',gioThucTe:40.01,gioExceptionChoDuyet:2,tongGioTheoDoi:42.01,thieuDuLieu:false}];
+result = weekly.s.guiCanhBaoGioTuan('05/11/2026','001');
 assert.equal(result.sent, 1); assert.equal(weekly.sent.length, 1);
 assert.equal(weekly.sent[0].opts.payload.chat_id, '-1004452694903');
 assert.equal(weekly.sent[0].opts.payload.message_thread_id, '2');

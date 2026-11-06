@@ -71,7 +71,9 @@ function diaChiNhanCanhBaoGioTuan_() {
 function guiCanhBaoGioTuan(ngayStr) {
   var props=PropertiesService.getScriptProperties(), token=props.getProperty('TELEGRAM_BOT_TOKEN') || '', dest=diaChiNhanCanhBaoGioTuan_();
   if(!token || !dest.chat || !dest.thread) { Logger.log('Thiếu TELEGRAM_BOT_TOKEN hoặc địa chỉ topic cảnh báo giờ tuần.'); return {sent:0, skipped:true, msg:'Thiếu cấu hình cảnh báo giờ tuần.'}; }
-  var rows=getBaoCaoGioTuan(ngayStr || fmtD(new Date())), sent=0, errors=[];
+  var targetDay=ngayStr || fmtD(new Date()), targetMa=arguments.length>1 ? arguments[1] : '', rows=targetMa?getGioTuanNhanh_(targetMa,targetDay):[], sent=0, errors=[];
+  // Chạy thủ công không quét dữ liệu lớn: chỉ trả hướng dẫn, không thể bị treo.
+  if(!targetMa) return {sent:0, skipped:true, msg:'Dùng testGuiCanhBaoGioTuanMau() để thử tin; cảnh báo thật chạy sau CHECK OUT.'};
   rows.forEach(function(r) {
     // Chỉ dùng giờ thực tế có đủ VÀO/RA để cảnh báo; Exception được nêu riêng.
     if(r.thieuDuLieu) return;
@@ -92,7 +94,21 @@ function guiCanhBaoGioTuan(ngayStr) {
   });
   return {sent:sent, skipped:false, msg:errors.length ? 'Telegram lỗi: '+errors.join('; ') : (sent ? 'Đã gửi '+sent+' cảnh báo giờ tuần.' : 'Chưa có cảnh báo giờ tuần mới.')};
 }
-// Chạy thủ công sau khi nhập Script Properties để thử một lần; không tạo dữ liệu chấm công.
+// Tính nhanh đúng một người trong tuần; không gọi export tháng/Excel.
+function getGioTuanNhanh_(ma, ngayStr) {
+  var start=getWeekStart(ngayStr), end=parseVNDate(start); end.setDate(end.getDate()+6);
+  var ss=SpreadsheetApp.getActiveSpreadsheet(), sh=ss.getSheetByName('CHECK IN'), v=sh&&sh.getLastRow()>1?sh.getDataRange().getDisplayValues():[], pairs={};
+  for(var i=1;i<v.length;i++){var r=v[i],day=cellDay(r[2]);if(String(r[0]).trim()!==String(ma).trim()||parseVNDate(day)<parseVNDate(start)||parseVNDate(day)>end)continue;var type=String(r[4]),k=day+'|'+String(r[3]),o=pairs[k]||(pairs[k]={day:day,ca:String(r[3]),inn:'',out:'',ex:false,ten:String(r[1]||'')});if(type==='IN')o.inn=cellHM(r[5]);if(type==='OUT')o.out=cellHM(r[6]);if(type==='EXCEPTION_IN'){o.inn=cellHM(r[5]);o.ex=true;}if(type==='EXCEPTION_OUT'){o.out=cellHM(r[6]);o.ex=true;}}
+  var actual=0, exception=0;Object.keys(pairs).forEach(function(k){var o=pairs[k];if(o.inn&&o.out){var h=Number(hoursBetween(o.day,o.inn,o.out)||0);if(o.ex)exception+=h;else actual+=h;}});
+  return [{ma:String(ma),ten:Object.keys(pairs).length?pairs[Object.keys(pairs)[0]].ten:'',tu:start,den:fmtD(end),gioThucTe:Math.round(actual*100)/100,gioExceptionChoDuyet:Math.round(exception*100)/100,thieuDuLieu:false}];
+}
+function testGuiCanhBaoGioTuanMau() {
+  var props=PropertiesService.getScriptProperties(),token=props.getProperty('TELEGRAM_BOT_TOKEN')||'',dest=diaChiNhanCanhBaoGioTuan_();
+  if(!token||!dest.chat||!dest.thread)return {ok:false,msg:'Thiếu cấu hình cảnh báo giờ tuần.'};
+  var resp=UrlFetchApp.fetch('https://api.telegram.org/bot'+token+'/sendMessage',{method:'post',payload:{chat_id:dest.chat,message_thread_id:dest.thread,text:'🧪 TEST CẢNH BÁO GIỜ TUẦN\nĐã kết nối đúng topic quản lý.'},muteHttpExceptions:true}),body=JSON.parse(resp.getContentText());
+  return {ok:resp.getResponseCode()===200&&body.ok,msg:(body&&body.description)||'Đã gửi tin test.'};
+}
+// Hàm cũ giữ lại để không lỗi người đã chọn trong danh sách chạy; không quét dữ liệu lớn.
 function testCanhBaoGioTuan() { return guiCanhBaoGioTuan(fmtD(new Date())); }
 
 function guiAnhTelegram(photoB64, caption) {
@@ -299,36 +315,22 @@ function getNhanVienList() {
 function getLichHomNay(ma) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('LICHLAM');
   if (!sh) return [];
-  var thu = weekDay(new Date()); // T2..CN
-  var v = sh.getDataRange().getDisplayValues();
-  var out = [];
+  var now=new Date(), thu = weekDay(now), today=fmtD(now), v = sh.getDataRange().getDisplayValues(), out = [];
   if (v.length < 2) return out;
-  var ncols = v[0].length;
-  for (var i = 1; i < v.length; i++) {
-    if (String(v[i][0]).trim() !== ma) continue;
-    var ngayCell, caCell, bd, kt;
-    if (ncols >= 7) { // sheet cũ 7 cột (A Mã B Tên C Thứ D Ngày E Ca F BD G KT)
-      ngayCell = String(v[i][3]).trim();
-      caCell = String(v[i][4] || '');
-      bd = fmtTimeCell(v[i][5]); kt = fmtTimeCell(v[i][6]);
-      if (!matchDay(String(v[i][2]).trim(), thu)) continue;
-    } else { // sheet chuẩn 6 cột (A Mã B Tên C Ngày D Ca E BD F KT)
-      ngayCell = String(v[i][2]).trim();
-      caCell = String(v[i][3] || '');
-      bd = fmtTimeCell(v[i][4]); kt = fmtTimeCell(v[i][5]);
-    }
-    if (!matchDay(ngayCell, thu)) continue;
-    out.push({ ca: String(caCell).trim(), bd: bd, kt: kt });
+  var h=v[0].map(function(x){return String(x).trim().toLowerCase();}), form=h.indexOf('hình thức'); if(form<0)form=h.indexOf('hinh thuc');
+  var oldLayout=h[2]==='thứ' || h[2]==='thu';
+  for (var i=1;i<v.length;i++) {
+    if(String(v[i][0]).trim()!==ma)continue;
+    var ngayCell,caCell,bd,kt;
+    if(oldLayout){ngayCell=String(v[i][3]).trim();caCell=String(v[i][4]||'');bd=fmtTimeCell(v[i][5]);kt=fmtTimeCell(v[i][6]);if(!matchDay(String(v[i][2]).trim(),thu))continue;}
+    else{ngayCell=String(v[i][2]).trim();caCell=String(v[i][3]||'');bd=fmtTimeCell(v[i][4]);kt=fmtTimeCell(v[i][5]);}
+    if(!matchDay(ngayCell,thu))continue;
+    var mode=form>=0?String(v[i][form]||'').trim():'Tại trung tâm'; if(mode!=='Online')mode='Tại trung tâm';
+    out.push({ca:String(caCell).trim(),bd:bd,kt:kt,hinhThuc:mode});
   }
-  // Sắp xếp ca gần giờ hiện tại nhất lên đầu để GV chỉ cần tick ca đầu
-  var nowMin = new Date().getHours() * 60 + new Date().getMinutes();
-  out.forEach(function (o) {
-    var m = o.bd.match(/(\d\d):(\d\d)/);
-    o.gap = m ? Math.abs((Number(m[1]) * 60 + Number(m[2])) - nowMin) : 9999;
-  });
-  out.sort(function (a, b) { return a.gap - b.gap; });
-  return out;
+  var nowMin=new Date().getHours()*60+new Date().getMinutes();out.forEach(function(o){var m=o.bd.match(/(\d\d):(\d\d)/);o.gap=m?Math.abs((Number(m[1])*60+Number(m[2]))-nowMin):9999;});out.sort(function(a,b){return a.gap-b.gap;});return out;
 }
+function getHinhThucCaHomNay_(ma, caLabel) { var list=getLichHomNay(ma); for(var i=0;i<list.length;i++)if(caLabel===list[i].ca+' '+list[i].bd+'-'+list[i].kt)return list[i].hinhThuc; return 'Tại trung tâm'; }
 
 function fmtTimeCell(x) {
   if (x instanceof Date) return Utilities.formatDate(x, TZ, 'HH:mm');
@@ -423,7 +425,6 @@ function getCheckinNotice(ma) {
 
 function submitCheckin(p) {
   if (!p.ma || !p.ten) return { ok: false, msg: 'Vui lòng nhập mã và họ tên.' };
-  if (!p.lat || !p.lng) return { ok: false, msg: 'Không lấy được vị trí GPS.' };
   if (!p.photo) return { ok: false, msg: 'Vui lòng chụp ảnh khuôn mặt.' };
   if (!p.type || (p.type !== 'IN' && p.type !== 'OUT')) return { ok: false, msg: 'Vui lòng chọn VÀO hoặc RA.' };
 
@@ -432,16 +433,15 @@ function submitCheckin(p) {
   var nowTs = p.submitTs || new Date().getTime();
   var gioCham = new Date(nowTs);
 
-  var dist = haversine(p.lat, p.lng, CENTER_LAT, CENTER_LNG);
-  var distM = Math.round(dist);
-  if (dist > RADIUS_M) {
-    return { ok: false, outOfRange: true, distance: distM,
-      msg: 'Bạn đang ở ngoài khu vực check-in. Khoảng cách hiện tại: ' + distM + ' m.' };
+  var todayStr = fmtD(gioCham), hinhThuc=getHinhThucCaHomNay_(p.ma, p.caLabel), isOnline=hinhThuc==='Online', distM='Online — không áp dụng GPS';
+  if (!isOnline) {
+    if (!p.lat || !p.lng) return { ok:false, msg:'Không lấy được vị trí GPS.' };
+    var dist=haversine(p.lat,p.lng,CENTER_LAT,CENTER_LNG); distM=Math.round(dist);
+    if (dist>RADIUS_M) return {ok:false,outOfRange:true,distance:distM,msg:'Bạn đang ở ngoài khu vực check-in. Khoảng cách hiện tại: '+distM+' m.'};
   }
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName('CHECK IN');
-  var todayStr = fmtD(gioCham);
 
   // Khi VÀO ca lịch mới mà còn Exception mở trong cùng ngày, tự RA Exception
   // đúng tại giờ VÀO mới để tránh chồng giờ và bớt một thao tác cho giáo viên.
@@ -525,7 +525,7 @@ function submitCheckin(p) {
   var ngayStr = fmtD(gioCham);
   var checkInTime = p.type === 'IN' ? cellHM(gioCham) : '';
   var checkOutTime = p.type === 'OUT' ? cellHM(gioCham) : '';
-  var noteFull = [note, canhBaoChungMay.ghiChu].filter(function (x) { return x; }).join(' | ');
+  var noteFull = [note, isOnline ? 'Hình thức: Online' : '', canhBaoChungMay.ghiChu].filter(function (x) { return x; }).join(' | ');
 
   if (exceptionOpen) {
     var exceptionCa = String(exceptionOpen[3] || 'Ca Exception');
@@ -545,7 +545,7 @@ function submitCheckin(p) {
     (p.type === 'IN' && !lateMin ? ', đúng giờ' : '');
   guiAnhTelegram(p.type === 'IN' ? p.photo : '', tin);
   // Chỉ kiểm sau RA: giờ đã có đủ VÀO/RA. Lỗi Telegram/báo cáo không chặn chấm công.
-  if (p.type === 'OUT') { try { guiCanhBaoGioTuan(ngayStr); } catch (weeklyWarnError) { Logger.log('Không gửi cảnh báo giờ tuần: ' + weeklyWarnError.message); } }
+  if (p.type === 'OUT') { try { guiCanhBaoGioTuan(ngayStr, p.ma); } catch (weeklyWarnError) { Logger.log('Không gửi cảnh báo giờ tuần: ' + weeklyWarnError.message); } }
 
   return { ok: true, time: fmtDT(gioCham), distance: distM, lateMin: lateMin, type: p.type,
     autoExceptionOut: !!exceptionOpen, exceptionInTime: exceptionOpen ? String(exceptionOpen[5] || '') : '',

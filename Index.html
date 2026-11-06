@@ -130,7 +130,7 @@
 function moHuongDan() { document.getElementById('guide').style.display = 'block'; }
 function dongHuongDan() { document.getElementById('guide').style.display = 'none'; }
 var openTs = 0, openText = '', lat = 0, lng = 0, acc = 0, photoB64 = '',
-    loai = '', caBd = '', caLabel = '', autoOutDone = false, autoOutData = null,
+    loai = '', caBd = '', caLabel = '', hinhThucCa = 'Tại trung tâm', autoOutDone = false, autoOutData = null,
     deviceId = '', deviceLabel = '';
 var nvMap = {};
 
@@ -169,7 +169,7 @@ window.onload = function () {
       s.appendChild(o);
     });
   }).getNhanVienList();
-  layGPS();
+  document.getElementById('gps').textContent = 'Chọn mã và ca để xác định có cần GPS.';
   chon('IN');
   // Ghi nhớ máy: lần đầu máy nào check-in cho mã nào thì nhớ, lần sau máy lạ
   // check-in cho mã đó thì máy ghi lại tên máy vào Sheet để bạn nhìn thấy.
@@ -267,10 +267,13 @@ function layGPS() {
 }
 
 function setCa(lich) {
-  var c = document.getElementById('ca');
-  var l = lich[Number(c.value) || 0];
-  if (l) { caBd = l.bd; caLabel = l.ca + ' ' + l.bd + '-' + l.kt; }
-  else { caBd = ''; caLabel = ''; }
+  var c = document.getElementById('ca'), l = lich[Number(c.value) || 0];
+  if (l) { caBd=l.bd; caLabel=l.ca+' '+l.bd+'-'+l.kt; hinhThucCa=l.hinhThuc||'Tại trung tâm'; }
+  else { caBd=''; caLabel=''; hinhThucCa='Tại trung tâm'; }
+  var online=hinhThucCa==='Online', gps=document.getElementById('gps'), gpsBtn=document.getElementById('gpsBtn');
+  if(online){gps.textContent='💻 Ca Online — không cần GPS';gpsBtn.style.display='none';}
+  else {gpsBtn.style.display=''; if(!lat||!lng) layGPS();}
+  checkReady();
 }
 
 function checkReady() {
@@ -288,12 +291,12 @@ function checkReady() {
   if (!loai) thieu.push('chọn VÀO/RA');
   if (!document.getElementById('ma').value) thieu.push('chọn mã');
   if (!openTs) thieu.push('chờ giờ máy');
-  if (!lat || !lng) thieu.push('chờ vị trí GPS');
+  if (hinhThucCa !== 'Online' && (!lat || !lng)) thieu.push('chờ vị trí GPS');
   if (!photoB64) thieu.push('chụp ảnh');
   document.getElementById('checklist').textContent =
     thieu.length ? 'Còn thiếu: ' + thieu.join(' + ') + '.' : 'Đủ hết rồi, bạn bấm nút xác nhận nhé.';
-  var ok = openTs && lat && lng && photoB64 &&
-           document.getElementById('ma').value && loai;
+  var ok = openTs && photoB64 && document.getElementById('ma').value && loai &&
+           (hinhThucCa === 'Online' || (lat && lng));
   document.getElementById('btn').disabled = !ok;
 }
 
@@ -312,8 +315,9 @@ function guiException() {
 function guiCheckin() {
   var m = document.getElementById('msg');
   var btn = document.getElementById('btn');
-  m.className = ''; m.textContent = 'Đang lấy vị trí mới... (đứng yên 3 giây)';
   btn.disabled = true;
+  if (hinhThucCa === 'Online') { m.className=''; m.textContent='Đang gửi ca Online...'; guiCheckinGui(); return; }
+  m.className = ''; m.textContent = 'Đang lấy vị trí mới... (đứng yên 3 giây)';
   // Lấy GPS tươi tại thời điểm bấm nút — không dùng vị trí lúc mở trang.
   if (!navigator.geolocation) {
     guiCheckinGui();

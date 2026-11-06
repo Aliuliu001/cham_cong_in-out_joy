@@ -1,0 +1,9 @@
+const assert=require('assert'),fs=require('fs'),vm=require('vm');
+const code=fs.readFileSync('Code.gs','utf8');
+const now=new Date(),p=n=>String(n).padStart(2,'0'),day=`${p(now.getDate())}/${p(now.getMonth()+1)}/${now.getFullYear()}`;
+const H=['Mã NV','Họ tên','Ngày','Ca','Loại IN/OUT','Giờ check in','Giờ check out','Trễ (phút)','Ghi chú','Ảnh','Khoảng cách','Thiết bị'];
+const L=['Mã NV','Họ tên','Ngày','Ca','Giờ bắt đầu','Giờ kết thúc','Hình thức'];
+function run(mode,lat,lng){const check=[H],lich=[L,['ON','Online','Cả ngày','Ca Online','08:00','10:00',mode]];const sh={getLastRow:()=>check.length,getDataRange:()=>({getDisplayValues:()=>check,getValues:()=>check}),appendRow:r=>check.push(r)};const ls={getLastRow:()=>lich.length,getDataRange:()=>({getDisplayValues:()=>lich,getValues:()=>lich})};const s={Date,Math,Number,String,Object,Array,RegExp,JSON,Error,Logger:{log(){}},SpreadsheetApp:{getActiveSpreadsheet:()=>({getSheetByName:n=>n==='CHECK IN'?sh:n==='LICHLAM'?ls:null})},Utilities:{formatDate:(d,t,f)=>f==='dd/MM/yyyy'?`${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`:f==='HH:mm'?`${p(d.getHours())}:${p(d.getMinutes())}`:f==='dd/MM/yyyy HH:mm:ss'?'x':'',getUuid:()=> 'id',base64Decode:()=>[],newBlob:()=>({})},DriveApp:{getFoldersByName:()=>({hasNext:()=>true,next:()=>({createFile:()=>({getUrl:()=>''})})})}};vm.createContext(s);vm.runInContext(code,s);s.guiAnhTelegram=()=>{};s.guiCanhBaoGioTuan=()=>{};return {r:s.submitCheckin({ma:'ON',ten:'Online',lat,lng,photo:'x',type:'IN',caLabel:'Ca Online 08:00-10:00',submitTs:now.getTime()}),check};}
+let x=run('Online','','');assert.equal(x.r.ok,true,'Online accepts no GPS');assert.match(x.check[1][8],/Hình thức: Online/);assert.match(x.check[1][10],/Online/);
+x=run('Tại trung tâm','','');assert.equal(x.r.ok,false,'on-site still requires GPS');
+console.log('PASS online attendance: Online skips GPS but on-site does not');
