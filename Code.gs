@@ -1223,8 +1223,12 @@ function previewPayrollWorkbook(monthStr) { var d=getPayrollWorkbookData(monthSt
 function getBaoCaoGioTuan(ngayStr) {
   var start=getWeekStart(ngayStr), endDate=parseVNDate(start); endDate.setDate(endDate.getDate()+6);
   var end=fmtD(endDate), ss=SpreadsheetApp.getActiveSpreadsheet(), approvals=getExceptionApprovalMap_(ss), pairs={}, names={}, people={}, legacyExceptionOpen={}, seenEvents={};
+  // Chỉ mở CHECK IN hiện hành và các bản chốt của tháng giao với đúng tuần đang xem.
+  // Không đọc các tháng không liên quan, vì dữ liệu lớn làm tab Giờ tuần chờ rất lâu.
+  var allowedSheets={'CHECK IN':true}, cursor=new Date(parseVNDate(start));
+  while(cursor<=endDate){ allowedSheets['CHECK IN - Tháng '+String(cursor.getMonth()+1).padStart(2,'0')+'-'+cursor.getFullYear()]=true; cursor.setMonth(cursor.getMonth()+1,1); }
   ss.getSheets().forEach(function(sh){
-    var name=sh.getName(); if(name!=='CHECK IN' && name.indexOf('CHECK IN - Tháng ')!==0 || sh.getLastRow()<2)return;
+    var name=sh.getName(); if(!allowedSheets[name] || sh.getLastRow()<2)return;
     var range=sh.getDataRange(), v=range.getDisplayValues(), raw=range.getValues();
     for(var i=1;i<v.length;i++){
       var day=ngayCuaO(raw[i][2]); if(parseVNDate(day)<parseVNDate(start)||parseVNDate(day)>endDate)continue;
