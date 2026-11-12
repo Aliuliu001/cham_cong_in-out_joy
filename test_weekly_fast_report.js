@@ -1,0 +1,14 @@
+const assert=require('assert'),fs=require('fs'),vm=require('vm');
+const H=['Mã NV','Họ tên','Ngày','Ca','Loại IN/OUT','Giờ check in','Giờ check out','Trễ','Ghi chú'];
+const date=s=>new Date(s+'T00:00:00');
+const rows=[H,['A','An',date('2026-11-09'),'Ca','IN','08:00','','',''],['A','An',date('2026-11-09'),'Ca','OUT','','10:30','','']];
+let payrollCalled=false;
+const sh={getName:()=> 'CHECK IN',getLastRow:()=>rows.length,getDataRange:()=>({getDisplayValues:()=>rows.map(r=>r.map(x=>x instanceof Date?`${String(x.getDate()).padStart(2,'0')}/${String(x.getMonth()+1).padStart(2,'0')}/${x.getFullYear()}`:x)),getValues:()=>rows})};
+const p=n=>String(n).padStart(2,'0');
+const s={Date,Math,Number,String,Object,Array,RegExp,JSON,Error,SpreadsheetApp:{getActiveSpreadsheet:()=>({getSheetByName:n=>n==='CHECK IN'?sh:null,getSheets:()=>[sh]})},Utilities:{formatDate:(d,t,f)=>f==='dd/MM/yyyy'?`${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`:f==='MM/yyyy'?`${p(d.getMonth()+1)}/${d.getFullYear()}`:f==='HH:mm'?`${p(d.getHours())}:${p(d.getMinutes())}`:''}};
+vm.createContext(s);vm.runInContext(fs.readFileSync('Code.gs','utf8'),s);
+s.getPayrollWorkbookData=()=>{payrollCalled=true;throw new Error('slow monthly calculation must not run');};
+const out=s.getBaoCaoGioTuan('12/11/2026');
+assert.equal(payrollCalled,false,'weekly report must not build the monthly payroll workbook');
+assert.equal(out.length,1);assert.equal(out[0].ma,'A');assert.equal(out[0].gioThucTe,2.5);
+console.log('PASS weekly fast report: reads selected week without monthly payroll build');
