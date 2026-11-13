@@ -138,6 +138,14 @@ Sau `/new`, anh gửi đúng câu: **“Đọc `/home/ubuntu/cham_cong_in-out_jo
 
 **Đạt yêu cầu khi:** có log thử thành công + ảnh/tin trong Topic lịch đúng nơi + log tự động đêm tiếp theo thành công, không còn lỗi `require` ở `onEdit`; launcher sau `git pull` không thể tái tải file Node vào Apps Script. Nếu không truy cập được máy Windows hoặc Apps Script, ghi rõ bước chờ anh thao tác, không đánh dấu đã sửa live.
 
+### Lỗi launcher tự đóng (13/11/2026 — chưa sửa, chặn L5)
+
+Anh Trương báo file `sync-deploy.bat` sau khi chạy tự đóng, không cho xem XONG/LỖI. Đọc batch hiện tại cho thấy ba lệnh gọi `clasp` trực tiếp. Trên Windows, `clasp` thường là `clasp.cmd`; một batch gọi `.cmd` khác **không qua `call`** sẽ không quay lại batch ban đầu, nên bỏ qua nhánh kết quả và `pause`. Kế hoạch chi tiết: `.hermes/plans/2026-11-13_214300-sua-launcher-khong-tu-dong-dong.md`.
+
+- [x] Test RED đã bắt đúng ba lệnh thiếu `call`; đã đổi `clasp deployments/push/deploy` thành `call clasp ...`. Tạo launcher mới `CAP_NHAT_CHAM_CONG.cmd` theo mẫu cửa sổ Dạy Bù: tự lấy mã mới từ GitHub, kiểm deployment, đẩy Apps Script, cập nhật link web, ghi nhật ký và dừng ở `Press any key`. Test GREEN chặn mọi lệnh triển khai không có `call`; đủ 14 Node tests, kiểm cú pháp `Code.gs` và `git diff --check` đều PASS trên Ubuntu.
+- [ ] Bắt buộc chạy thử lỗi và thử thật trong Windows CMD; Linux/Node chỉ chứng minh file nguồn, không đủ để kết luận cửa sổ không đóng.
+- Sau B3 Windows thành công mới tiếp tục L5–L7 (đưa bản sạch lên Apps Script và kiểm lịch). Không yêu cầu anh nhấp đúp lại launcher thật trước khi hoàn tất lượt thử lỗi an toàn.
+
 ## Việc tiếp theo
 
 Ưu tiên chuỗi sửa lịch ở trên, bắt đầu xác nhận file launcher và cấu hình file được đưa lên Apps Script; sau khi có bằng chứng gửi lịch tự động thành công mới quay lại các mục A→E ở kế hoạch báo cáo/chuyển ca. Xem `TASKS.md` và `context.md` để biết trạng thái từng bước.
