@@ -1,0 +1,8 @@
+# Only these four files are Apps Script production files.
+# Node tests, sample generators, documentation and local tools stay in GitHub
+# but must never be uploaded to Apps Script.
+**
+!/Code.gs
+!/Index.html
+!/BaoCao.html
+!/appsscript.json

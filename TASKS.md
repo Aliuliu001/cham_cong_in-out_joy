@@ -2,6 +2,18 @@
 
 > Chỉ tick khi đã chạy test và kiểm tra kết quả thật. Mọi thay đổi giữ luồng một chiều Check IN/OUT → file xuất → Bảng lương.
 
+## Ưu tiên L: khôi phục lịch làm việc tự động (PLAN.md, 13/11/2026)
+
+> Chưa triển khai. Không tick chỉ vì mã trên GitHub đã sửa; phải phân biệt kiểm tra tại máy Windows, Apps Script và Telegram thật. Tạm ngưng xóa từng file `test_` thủ công và không chạy `setup()`.
+
+- [ ] **L1 — Kiểm kê:** xác nhận file anh bấm `D:\CLASP\cham_cong\sync-deploy.bat`, cấu hình `.clasp.json`, danh sách tệp Apps Script hiện tại (kể cả `Code.gs_add.gs` và file anh đã xóa), trigger lịch, lịch sử lỗi, 3 Script Properties không lộ token; lưu bằng chứng trước/sau.
+- [ ] **L2 — Chặn file thử:** tạo và thử `.claspignore` chỉ đưa `Code.gs`, `Index.html`, `BaoCao.html`, `appsscript.json` lên Apps Script; giữ `generate_v4_sample.js` và các `test_*.js` ở GitHub; xác minh `clasp` thực sự nhận đúng 4 file trước khi push và không làm mất `Code.gs_add.gs` nếu nó có hàm sản xuất.
+- [ ] **L3 — Sửa file cập nhật:** đổi `PROJECT_DIR` từ `D:\cham_cong` sang `D:\CLASP\cham_cong`; kiểm tra sạch trước `git pull`, đúng script ID/deployment ID/link thật, log rõ và không tự đóng. Xác nhận file anh bấm ở Windows thật sự mang thay đổi này trước khi chạy.
+- [ ] **L4 — Kiểm thử local:** mô phỏng launcher trong Windows CMD trên bản sao cả nhánh thành công/thất bại, kiểm tên file sẽ đưa lên, `node test_lichlam_telegram.js`, các `test_*.js`, syntax `Code.gs`, `git diff --check`; push GitHub chỉ khi PASS. Không coi push là sửa xong bản live.
+- [ ] **L5 — Cập nhật Apps Script:** cập nhật đúng dự án; xác nhận danh sách file chạy đã sạch (4 file chính hoặc file phụ đã chứng minh cần thiết), không còn `.gs` do Node test sinh ra, hàm lịch và `onEdit` còn; nếu đổi web app, deploy đúng link hiện dùng.
+- [ ] **L6 — Tin thử có kiểm soát:** kiểm bot thật bằng `kiemTraBotLichLam()`, kiểm ID nhóm/topic, chạy `testGuiLichLamNow()` đúng một lần, đối chiếu tin Telegram/ca/ngày và nhật ký không còn `require`; không gửi bù hàng loạt.
+- [ ] **L7 — Xác nhận tự động và phòng ngừa:** kiểm một lần chạy 21:00–22:00 VN tiếp theo có đúng một tin và log thành công; xác nhận `onEdit` không còn lỗi; cập nhật README tên bot theo thực tế, ghi hướng dẫn lọc file và kế hoạch cảnh báo thất bại. Sau đó mới tiếp tục A→E.
+
 ## Đã xong
 
 - [x] Gộp IN / OUT / VẮNG vào một sheet CHECK IN.

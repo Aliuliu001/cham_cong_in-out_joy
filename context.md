@@ -25,6 +25,14 @@
 - Bản export hiện tại ở `Code.gs`: `getPayrollAttendanceRows`, CSV BOM, Excel sheet `Cham cong`.
 - Test hiện tại: `node test_payroll_export.js`.
 
+## Ưu tiên khẩn: lịch làm việc ngừng gửi (13/11/2026)
+
+- Nguồn chứng cứ: tin cuối lúc 21:10 ngày 05/11 (lịch 06/11); `sendTomorrowWorkSchedule` và `onEdit` thất bại ngày 06/11 với `ReferenceError: require is not defined` tại `generate_v4_sample:2:10` trong Apps Script project `1FUf9yVSki_-dSpM4UfBsdsBuDf2pSdaKNq66ioSYIr12BQfe_qLJolex`. Cả các `test_*.js` cũng là mã kiểm tra Node, không được đưa lên Apps Script.
+- Thư mục Windows anh xác nhận: `D:\CLASP\cham_cong`, file anh bấm: `D:\CLASP\cham_cong\sync-deploy.bat`. Batch trong repo vẫn đặt `PROJECT_DIR=D:\cham_cong` (cũ), phải kiểm tra và sửa **đúng file Windows** trước khi chạy. Chưa xác minh `.clasp.json`, deployment ID hoặc file `Code.gs_add.gs` trên Apps Script. Đừng chạy batch hay xóa từng file trên Apps Script lúc này.
+- Repo `cham_cong_in-out_joy` chịu trách nhiệm thông báo lịch, repo `joy_day_bu` phụ trách SOTW. Ảnh lịch ghi bot `@joy_lichlam_sotw_daybu_bot`, nhưng README lịch vẫn ghi `@joy_victini_bot`; chưa xác minh token thực tế. Topic lịch do code kiểm tra thread `50`, cần xác minh trên hệ thống thật.
+- Anh Trương nói **mọi thảo luận/thay đổi SOTW về sau sẽ trao đổi trong topic Telegram hiện tại (Office joy_office, thread 3456)**. Không đồng nhất topic trao đổi này với topic bot đăng SOTW (`SOTW_3`); không đổi đích thông báo khi chưa có yêu cầu rõ.
+- Kế hoạch từng bước và điều kiện hoàn thành ở `PLAN.md` mục “Sự cố gửi lịch 06–13/11/2026”; checklist ở `TASKS.md`. **Chưa sửa code/launcher, chưa push, chưa cập nhật Apps Script, chưa có tin thử thành công.** Các mục A→E của kế hoạch báo cáo/chuyển ca tạm xếp sau việc cứu lịch.
+
 ## Next action
 
-Bắt đầu Task 1 trong `TASKS.md`: cập nhật docs và viết test RED cho helper đánh giá ca; chưa sửa logic sản xuất trước test.
+Kiểm tra phiên bản/đường dẫn thật của launcher và cấu hình `clasp` trên Windows (ảnh Notepad hoặc file nguyên bản nếu cần), trạng thái file Apps Script sau thao tác xóa trước đó, rồi triển khai Task L1–L7 trong `TASKS.md` từng mục một. Không chạy `setup()`; không in token; không đánh dấu xong trước khi kiểm được gửi tự động đêm tiếp theo.
