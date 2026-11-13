@@ -14,7 +14,7 @@
 
 - [ ] **B0 — Tái hiện có bằng chứng:** mở đúng `D:\CLASP\cham_cong\sync-deploy.bat` bằng Notepad, kiểm dấu nhận dạng/path; chạy từ CMD với `call` và xem log dừng ở đâu; xác nhận `where clasp` là `.cmd` hay executable.
 - [x] **B1 — RED/GREEN:** test bắt buộc `call clasp` cho deployments/push/deploy đã RED đúng vì bản cũ thiếu `call`; tạo launcher mới `CAP_NHAT_CHAM_CONG.cmd` theo mẫu Dạy Bù (tự lấy mã mới → kiểm deployment → đẩy Apps Script → cập nhật link → dừng ở `Press any key`). GREEN: 14 Node tests, syntax `Code.gs`, `git diff --check` PASS trên Ubuntu. Test còn chặn mọi lệnh `clasp deployments/push/deploy` không có `call`.
-- [ ] **B2 — Windows lỗi an toàn:** chạy bản sao batch có `PROJECT_DIR` sai trong CMD; phải dừng, ghi `LOI:`, không chạy push/deploy, và hiện `Press any key`. **Chờ kiểm trên máy Windows — Ubuntu không thể xác nhận hành vi CMD.**
+- [ ] **B2 — Windows lỗi an toàn:** đã đẩy sẵn `KIEM_TRA_LAUNCHER_AN_TOAN.cmd` (không gọi Git/clasp, cố tình dùng thư mục sai). Trên Windows chạy file này; phải hiện `LOI:`, `PASS: Da dung an toan...`, dừng ở `Press any key`, và tạo `NHAT_KY_KIEM_TRA_LAUNCHER.txt`. **Chờ anh kiểm trên máy Windows — Ubuntu không thể xác nhận hành vi CMD.**
 - [ ] **B3 — Windows thật:** commit/push sau B2; chạy launcher đúng từ CMD, xác nhận log 4 bước và `XONG:`/`Press any key`; sau đó nhấp đúp kiểm y hệt. Nếu lỗi, gửi log, không chạy lại mù. **Chưa được chạy bản thật.**
 
 - [ ] **L5 — Cập nhật Apps Script:** chỉ sau B3 PASS, cập nhật đúng dự án; xác nhận danh sách file chạy đã sạch (4 file chính hoặc file phụ đã chứng minh cần thiết), không còn `.gs` do Node test sinh ra, hàm lịch và `onEdit` còn; nếu đổi web app, deploy đúng link hiện dùng.

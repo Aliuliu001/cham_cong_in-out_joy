@@ -22,6 +22,11 @@ assert.ok(ignore.includes('**'), '.claspignore must first ignore every file');
 const legacyLauncher = fs.readFileSync('sync-deploy.bat', 'utf8');
 assert.match(legacyLauncher, /call "%~dp0CAP_NHAT_CHAM_CONG\.cmd"/);
 
+const safetyTest = fs.readFileSync('KIEM_TRA_LAUNCHER_AN_TOAN.cmd', 'utf8');
+assert.match(safetyTest, /PROJECT_DIR=D:\\CLASP\\cham_cong__THU_SAI/);
+assert.match(safetyTest, /PASS: Da dung an toan/);
+assert.doesNotMatch(safetyTest, /\b(git|clasp)\s+(pull|push|deployments|deploy)\b/i);
+
 const batch = fs.readFileSync('CAP_NHAT_CHAM_CONG.cmd', 'utf8');
 assert.match(batch, /set "PROJECT_DIR=D:\\CLASP\\cham_cong"/);
 assert.match(batch, /title CAP NHAT CHAM CONG - DANG CHAY/);
